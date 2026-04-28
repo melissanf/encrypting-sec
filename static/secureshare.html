@@ -253,12 +253,12 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13
       <div class="page-title">Dashboard</div>
       <div class="page-sub">System overview — last 24 hours</div>
     </div>
-    <button class="btn btn-sm" onclick="toast('Refreshing data...','info')">Refresh</button>
+    <button class="btn btn-sm" id="dash-refresh-btn">Refresh</button>
   </div>
   <div class="three-col">
-    <div class="metric"><div class="metric-label">Files transferred</div><div class="metric-val blue">12</div><div class="metric-sub">+3 today</div></div>
-    <div class="metric"><div class="metric-label">Signatures verified</div><div class="metric-val green">12</div><div class="metric-sub">100% success</div></div>
-    <div class="metric"><div class="metric-label">Failed verifications</div><div class="metric-val red">0</div><div class="metric-sub">All clear</div></div>
+    <div class="metric"><div class="metric-label">Files transferred</div><div class="metric-val blue" id="met-files">—</div><div class="metric-sub" id="met-files-sub">—</div></div>
+    <div class="metric"><div class="metric-label">Signatures verified</div><div class="metric-val green" id="met-verified">—</div><div class="metric-sub" id="met-verified-sub">—</div></div>
+    <div class="metric"><div class="metric-label">Failed verifications</div><div class="metric-val red" id="met-failed">—</div><div class="metric-sub">All clear</div></div>
   </div>
   <div class="card">
     <div class="card-title">Active handshake — client-1 / report.pdf</div>
@@ -310,7 +310,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13
     <div><div class="page-title">Client</div><div class="page-sub">Connect to server and send encrypted files</div></div>
     <div style="display:flex;gap:8px">
       <span id="conn-status" class="badge badge-fail">disconnected</span>
-      <button class="btn btn-sm btn-primary" id="conn-btn" onclick="toggleConnect()">Connect</button>
+      <button class="btn btn-sm btn-primary" id="conn-btn">Connect</button>
     </div>
   </div>
   <div class="two-col">
@@ -359,7 +359,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13
         <span id="file-name" style="font-family:var(--mono);font-size:11px;color:var(--text)">—</span>
         <div style="display:flex;gap:6px">
           <span id="file-size" class="badge badge-info">—</span>
-          <button class="btn btn-sm btn-primary" onclick="simulateSend()">Send encrypted</button>
+          <button class="btn btn-sm btn-primary" id="send-btn">Send encrypted</button>
           <button class="btn btn-sm btn-danger" onclick="document.getElementById('send-area').style.display='none'">Remove</button>
         </div>
       </div>
@@ -390,7 +390,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13
     <div><div class="page-title">Server</div><div class="page-sub">Receive and decrypt incoming files</div></div>
     <div style="display:flex;gap:8px">
       <span class="badge badge-ok">listening · port 5000</span>
-      <button class="btn btn-sm btn-danger" onclick="toast('Server stopped','err')">Stop server</button>
+      <button class="btn btn-sm btn-danger" id="server-toggle-btn">Stop server</button>
     </div>
   </div>
   <div class="three-col">
@@ -446,7 +446,10 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13
 <div class="page" id="page-certs">
   <div class="page-header">
     <div><div class="page-title">Certificates</div><div class="page-sub">Certificate Authority and issued certificates</div></div>
-    <button class="btn btn-sm btn-primary" onclick="toast('Certificate generation form ready','info')">Issue new cert</button>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-sm" id="gen-ca-btn">Generate CA</button>
+      <button class="btn btn-sm btn-primary" id="issue-cert-btn">Issue new cert</button>
+    </div>
   </div>
   <div class="card">
     <div class="card-title">Issue certificate</div>
@@ -469,7 +472,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13
           <select><option>SHA-256</option><option>SHA-512</option></select>
         </div>
         <div style="margin-top:8px;display:flex;gap:8px">
-          <button class="btn btn-primary" onclick="toast('Certificate issued and saved','ok')" style="flex:1">Generate &amp; sign</button>
+          <button class="btn btn-primary" id="gen-sign-btn" style="flex:1">Generate &amp; sign</button>
           <button class="btn" onclick="toast('CSR generated','info')">Export CSR</button>
         </div>
       </div>
@@ -519,7 +522,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13
     <div class="card-title">Inspect certificate</div>
     <div style="display:flex;gap:8px;margin-bottom:10px">
       <input placeholder="Paste PEM content or upload .pem file..." style="flex:1;height:32px;background:var(--surface2);border:1px solid var(--border);border-radius:5px;padding:0 10px;color:var(--text);font-family:var(--mono);font-size:11px;outline:none"/>
-      <button class="btn btn-sm" onclick="toast('Certificate parsed successfully','ok')">Inspect</button>
+      <button class="btn btn-sm" id="inspect-cert-btn">Inspect</button>
     </div>
     <div class="cert-card">
       <div class="cert-field"><span class="k">Subject</span><span class="v">CN=client-1, O=SecureShare Group</span></div>
@@ -548,8 +551,8 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13
         <select id="rsa-key"><option>server.pem (public)</option><option>client-1.pem (public)</option><option>server-key.pem (private)</option></select>
       </div>
       <div style="display:flex;gap:6px;margin-bottom:10px">
-        <button class="btn btn-sm btn-primary" onclick="cryptoAction('rsa-out','RSA-OAEP encrypted')">Encrypt</button>
-        <button class="btn btn-sm" onclick="cryptoAction('rsa-out','RSA-OAEP decrypted: Hello, SecureShare!')">Decrypt</button>
+        <button class="btn btn-sm btn-primary" id="rsa-enc-btn">Encrypt</button>
+        <button class="btn btn-sm" id="rsa-dec-btn">Decrypt</button>
       </div>
       <div class="crypto-output" id="rsa-out" style="color:var(--text3);font-size:10px">Output appears here...</div>
     </div>
@@ -558,8 +561,8 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13
       <div class="field"><label>Input text</label><input id="aes-in" value="Secret file contents here"/></div>
       <div class="field"><label>AES key (hex, 32 bytes)</label><input id="aes-key" value="3a7f2c8b1e4d09f6a5b2c3d4e5f60718" style="font-family:var(--mono);font-size:11px"/></div>
       <div style="display:flex;gap:6px;margin-bottom:10px">
-        <button class="btn btn-sm btn-primary" onclick="cryptoAction('aes-out','AES-256-CBC encrypted (random IV prepended)')">Encrypt</button>
-        <button class="btn btn-sm" onclick="cryptoAction('aes-out','AES-256-CBC decrypted: Secret file contents here')">Decrypt</button>
+        <button class="btn btn-sm btn-primary" id="aes-enc-btn">Encrypt</button>
+        <button class="btn btn-sm" id="aes-dec-btn">Decrypt</button>
       </div>
       <div class="crypto-output" id="aes-out" style="color:var(--text3);font-size:10px">Output appears here...</div>
     </div>
@@ -568,7 +571,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13
     <div class="card">
       <div class="card-title">SHA-256 hash</div>
       <div class="field"><label>Input</label><input id="hash-in" value="report.pdf contents..."/></div>
-      <button class="btn btn-sm btn-primary" onclick="cryptoAction('hash-out','a3f2c8b1e4d09f6a5b2c3d4e5f607189a1b2c3d4e5f60718293a4b5c6d7e8f9')" style="margin-bottom:10px">Compute SHA-256</button>
+      <button class="btn btn-sm btn-primary" id="hash-btn" style="margin-bottom:10px">Compute SHA-256</button>
       <div class="crypto-output" id="hash-out" style="color:var(--text3);font-size:10px">Hash appears here...</div>
     </div>
     <div class="card">
@@ -578,8 +581,8 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13
         <select><option>client-1-key.pem (private)</option><option>client-2-key.pem (private)</option></select>
       </div>
       <div style="display:flex;gap:6px;margin-bottom:10px">
-        <button class="btn btn-sm btn-primary" onclick="cryptoAction('sig-out','RSA-SHA256 signature generated')">Sign</button>
-        <button class="btn btn-sm" onclick="cryptoAction('sig-out','Signature VALID — matches public key')">Verify</button>
+        <button class="btn btn-sm btn-primary" id="sign-btn">Sign</button>
+        <button class="btn btn-sm" id="verify-btn">Verify</button>
       </div>
       <div class="crypto-output" id="sig-out" style="color:var(--text3);font-size:10px">Signature appears here...</div>
     </div>
@@ -619,7 +622,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13
   <div class="card">
     <div class="card-title">End-to-end test runner</div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-      <button class="btn btn-primary" onclick="runTest()">Run full E2E test</button>
+      <button class="btn btn-primary" id="e2e-test-btn">Run full E2E test</button>
       <span style="font-size:11px;color:var(--text3)">Spins up local server + client, sends test file, verifies SHA-256 integrity</span>
     </div>
     <div id="test-result" style="margin-top:12px;display:none">
@@ -675,18 +678,16 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13
 <div class="toasts" id="toasts"></div>
 
 <script>
-function gotoPage(id, navBtn) {
-  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-  document.getElementById('page-' + id).classList.add('active');
-  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
-  if (navBtn) navBtn.classList.add('active');
-  const rp = document.getElementById('rpanel');
-  rp.style.display = (id === 'dashboard' || id === 'server') ? 'flex' : 'none';
-}
+// ── UTILS ──────────────────────────────────────────
 
-function setSidebar(el) {
-  document.querySelectorAll('.sidebar-item').forEach(i => i.classList.remove('active'));
-  el.classList.add('active');
+async function api(url, opts) {
+  try {
+    const r = await fetch(url, opts);
+    return await r.json();
+  } catch (e) {
+    toast(e.message, 'err');
+    return { status: 'error', message: e.message };
+  }
 }
 
 function toast(msg, type) {
@@ -699,20 +700,74 @@ function toast(msg, type) {
   setTimeout(() => t.remove(), 3000);
 }
 
-let connected = false;
-function toggleConnect() {
-  connected = !connected;
-  document.getElementById('conn-status').className = 'badge ' + (connected ? 'badge-ok' : 'badge-fail');
-  document.getElementById('conn-status').textContent = connected ? 'connected' : 'disconnected';
-  document.getElementById('conn-btn').textContent = connected ? 'Disconnect' : 'Connect';
-  toast(connected ? 'Connected to ' + document.getElementById('srv-ip').value : 'Disconnected', connected ? 'ok' : 'info');
+function fmtSize(b) {
+  if (b >= 1048576) return (b / 1048576).toFixed(1) + ' MB';
+  if (b >= 1024) return (b / 1024).toFixed(0) + ' KB';
+  return b + ' B';
 }
+
+// ── NAVIGATION ────────────────────────────────────
+
+function gotoPage(id, navBtn) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.getElementById('page-' + id).classList.add('active');
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  if (navBtn) navBtn.classList.add('active');
+  document.getElementById('rpanel').style.display = (id === 'dashboard' || id === 'server') ? 'flex' : 'none';
+  // auto-load page data
+  if (id === 'dashboard') loadDashboard();
+  if (id === 'server') loadServerData();
+  if (id === 'certs') loadCerts();
+  if (id === 'log') loadAuditLog();
+}
+
+function setSidebar(el) {
+  document.querySelectorAll('.sidebar-item').forEach(i => i.classList.remove('active'));
+  el.classList.add('active');
+}
+
+// ── DASHBOARD ─────────────────────────────────────
+
+async function loadDashboard() {
+  const [status, files, log] = await Promise.all([
+    api('/api/status'),
+    api('/api/server/files'),
+    api('/api/log?limit=8')
+  ]);
+
+  // metrics
+  document.getElementById('met-files').textContent = status.files_received ?? '—';
+  document.getElementById('met-verified').textContent = status.verified ?? '—';
+  document.getElementById('met-failed').textContent = status.failed ?? '—';
+  document.getElementById('met-files-sub').textContent = status.ca_ready ? 'CA loaded' : 'CA not set up';
+
+  // recent transfers
+  const tbody = document.querySelector('#page-dashboard .two-col .tbl tbody');
+  if (files.files && files.files.length) {
+    tbody.innerHTML = files.files.slice(0, 6).map(f =>
+      '<tr><td>' + f.filename + '</td><td class="mono">' + f.from + '</td><td class="mono">' + fmtSize(f.size) + '</td><td><span class="badge badge-' + (f.status === 'verified' ? 'ok' : 'pending') + '">' + f.status + '</span></td></tr>'
+    ).join('');
+  }
+
+  // live log
+  if (log.log && log.log.length) {
+    const lw = document.querySelector('#page-dashboard .log-wrap');
+    lw.innerHTML = log.log.slice(0, 8).map(l =>
+      '<div class="log-row ' + (l.level || 'info') + '"><span class="log-time">' + l.time + '</span><span class="log-msg"><b>' + l.actor + '</b> ' + l.msg + '</span></div>'
+    ).join('');
+  }
+}
+
+// ── CLIENT ────────────────────────────────────────
+
+let selectedFile = null;
 
 function handleFile(e) {
   const f = e.target.files[0];
   if (!f) return;
+  selectedFile = f;
   document.getElementById('file-name').textContent = f.name;
-  document.getElementById('file-size').textContent = (f.size / 1024).toFixed(0) + ' KB';
+  document.getElementById('file-size').textContent = fmtSize(f.size);
   document.getElementById('send-area').style.display = 'block';
 }
 
@@ -721,71 +776,384 @@ function handleDrop(e) {
   document.getElementById('drop-zone').classList.remove('drag');
   const f = e.dataTransfer.files[0];
   if (!f) return;
+  selectedFile = f;
   document.getElementById('file-name').textContent = f.name;
-  document.getElementById('file-size').textContent = (f.size / 1024).toFixed(0) + ' KB';
+  document.getElementById('file-size').textContent = fmtSize(f.size);
   document.getElementById('send-area').style.display = 'block';
 }
 
-function simulateSend() {
-  if (!connected) { toast('Not connected to server','err'); return; }
+async function sendFile() {
+  if (!selectedFile) { toast('No file selected', 'err'); return; }
   const pw = document.getElementById('send-prog-wrap');
   pw.style.display = 'block';
-  let p = 0;
-  const stages = ['Generating AES key...','Encrypting file...','Wrapping key with RSA...','Sending...','Verifying signature...'];
+  const stages = ['Encrypting...', 'Uploading...', 'Verifying...'];
+  let stageIdx = 0;
+
   const iv = setInterval(() => {
-    p += 4;
-    if (p > 100) p = 100;
+    const p = Math.min(15 + stageIdx * 30 + Math.random() * 10, 95);
     document.getElementById('send-prog-fill').style.width = p + '%';
-    document.getElementById('send-pct').textContent = p + '%';
-    document.getElementById('send-stage').textContent = stages[Math.min(Math.floor(p / 22), 4)];
-    if (p === 100) {
-      clearInterval(iv);
-      toast('File sent and verified','ok');
-      setTimeout(() => { pw.style.display = 'none'; document.getElementById('send-area').style.display = 'none'; }, 1500);
+    document.getElementById('send-pct').textContent = Math.round(p) + '%';
+    document.getElementById('send-stage').textContent = stages[Math.min(stageIdx, 2)];
+  }, 200);
+
+  const fd = new FormData();
+  fd.append('file', selectedFile);
+  fd.append('client_name', 'client-1');
+
+  try {
+    const res = await api('/api/client/send', { method: 'POST', body: fd });
+    clearInterval(iv);
+    document.getElementById('send-prog-fill').style.width = '100%';
+    document.getElementById('send-pct').textContent = '100%';
+    document.getElementById('send-stage').textContent = 'Complete';
+    if (res.status === 'ok') {
+      toast('File sent and verified', 'ok');
+      // append to transfer history
+      const tbody = document.querySelector('#page-client .tbl tbody');
+      tbody.innerHTML = '<tr><td>' + selectedFile.name + '</td><td class="mono">localhost</td><td class="mono">' + new Date().toLocaleTimeString() + '</td><td class="mono">' + fmtSize(selectedFile.size) + '</td><td><span class="badge badge-ok">sent</span></td></tr>' + tbody.innerHTML;
+    } else {
+      toast(res.message || 'Send failed', 'err');
     }
-  }, 80);
-}
-
-function cryptoAction(outId, msg) {
-  const el = document.getElementById(outId);
-  el.style.color = 'var(--green)';
-  el.textContent = '';
-  const full = '[' + new Date().toLocaleTimeString() + '] ' + msg + '\n\n' + randomHex();
-  let i = 0;
-  const iv = setInterval(() => {
-    el.textContent += full[i++];
-    if (i >= full.length) clearInterval(iv);
-  }, 12);
-}
-
-function randomHex() {
-  let s = '';
-  for (let i = 0; i < 64; i++) s += Math.floor(Math.random()*16).toString(16);
-  return s.match(/.{1,8}/g).join(' ');
-}
-
-function runTest() {
-  document.getElementById('test-result').style.display = 'block';
-  toast('E2E test complete — all passed','ok');
-}
-
-let pct = 68;
-setInterval(() => {
-  if (pct < 100) {
-    pct++;
-    const p = pct + '%';
-    const pf = document.getElementById('prog-fill');
-    const pp = document.getElementById('prog-pct');
-    const rp = document.getElementById('rprog');
-    const rc = document.getElementById('rpct');
-    if (pf) pf.style.width = p;
-    if (pp) pp.textContent = p;
-    if (rp) rp.style.width = p;
-    if (rc) rc.textContent = p;
+  } finally {
+    setTimeout(() => {
+      pw.style.display = 'none';
+      document.getElementById('send-prog-fill').style.width = '0%';
+      document.getElementById('send-pct').textContent = '0%';
+    }, 2000);
   }
-}, 600);
+}
+
+// ── SERVER ────────────────────────────────────────
+
+async function toggleServer() {
+  const badge = document.querySelector('#page-server .page-header .badge');
+  const btn = document.getElementById('server-toggle-btn');
+
+  const state = await api('/api/status');
+  if (state.server_running) {
+    const res = await api('/api/server/stop', { method: 'POST' });
+    if (res.status === 'ok') {
+      badge.className = 'badge badge-fail';
+      badge.textContent = 'stopped';
+      btn.textContent = 'Start server';
+      btn.className = 'btn btn-sm btn-primary';
+      toast('Server stopped', 'info');
+    }
+  } else {
+    const res = await api('/api/server/start', { method: 'POST' });
+    if (res.status === 'ok') {
+      badge.className = 'badge badge-ok';
+      badge.textContent = 'listening · port 8443';
+      btn.textContent = 'Stop server';
+      btn.className = 'btn btn-sm btn-danger';
+      toast('Server started on port 8443', 'ok');
+    } else {
+      toast(res.message, 'err');
+    }
+  }
+}
+
+async function loadServerData() {
+  const [status, files, log] = await Promise.all([
+    api('/api/status'),
+    api('/api/server/files'),
+    api('/api/server/log?limit=10')
+  ]);
+
+  // update server header badge/button
+  const badge = document.querySelector('#page-server .page-header .badge');
+  const btn = document.getElementById('server-toggle-btn');
+  if (status.server_running) {
+    badge.className = 'badge badge-ok';
+    badge.textContent = 'listening · port 8443';
+    btn.textContent = 'Stop server';
+    btn.className = 'btn btn-sm btn-danger';
+  } else {
+    badge.className = 'badge badge-fail';
+    badge.textContent = 'stopped';
+    btn.textContent = 'Start server';
+    btn.className = 'btn btn-sm btn-primary';
+  }
+
+  // metrics
+  const metrics = document.querySelectorAll('#page-server .three-col .metric-val');
+  if (files.files) {
+    metrics[0].textContent = files.files.length;
+    const totalBytes = files.files.reduce((s, f) => s + (f.size || 0), 0);
+    metrics[2].textContent = fmtSize(totalBytes);
+  }
+
+  // received files table
+  if (files.files && files.files.length) {
+    const tbody = document.querySelector('#page-server .tbl tbody');
+    tbody.innerHTML = files.files.slice(0, 10).map(f =>
+      '<tr><td>' + f.filename + '</td><td class="mono">' + f.from + '</td><td class="mono">' + fmtSize(f.size) + '</td><td class="mono">' + f.time + '</td><td><span class="badge badge-' + (f.status === 'verified' ? 'ok' : 'pending') + '">' + f.status + '</span></td><td><button class="btn btn-xs" onclick="toast(\'File already decrypted on receipt\',\'ok\')">Decrypt</button></td></tr>'
+    ).join('');
+  }
+
+  // server log
+  if (log.log && log.log.length) {
+    const lw = document.querySelector('#page-server .log-wrap');
+    lw.innerHTML = log.log.slice(0, 10).map(l =>
+      '<div class="log-row ' + (l.level || 'info') + '"><span class="log-time">' + l.time + '</span><span class="log-msg"><b>' + l.actor + '</b> ' + l.msg + '</span></div>'
+    ).join('');
+  }
+}
+
+// ── CERTIFICATES ──────────────────────────────────
+
+async function loadCerts() {
+  const res = await api('/api/ca/list');
+  if (res.status !== 'ok' || !res.certs) return;
+  const tbody = document.querySelector('#page-certs .tbl tbody');
+  tbody.innerHTML = res.certs.map(c =>
+    '<tr><td class="mono">' + c.subject + '</td><td><span class="badge badge-info">' + (c.subject === 'CA-root' ? 'CA' : 'Cert') + '</span></td><td class="mono" style="font-size:10px">' + c.fingerprint + '</td><td class="mono">' + c.valid_from + '</td><td class="mono">' + c.valid_until + '</td><td><span class="badge ' + (c.trusted ? 'badge-ok' : 'badge-fail') + '">' + (c.trusted ? 'valid' : 'untrusted') + '</span></td></tr>'
+  ).join('');
+  // sidebar count
+  const cnt = document.querySelector('.sidebar-item:nth-child(4) .sidebar-count');
+  if (cnt) cnt.textContent = res.certs.length;
+}
+
+async function generateCA() {
+  const res = await api('/api/ca/generate', { method: 'POST' });
+  if (res.status === 'ok') {
+    toast('CA root generated successfully', 'ok');
+    loadCerts();
+  } else {
+    toast(res.message, 'err');
+  }
+}
+
+async function issueCert() {
+  const cn = document.querySelector('#page-certs input[placeholder*="client-3"]').value.trim();
+  const days = document.querySelector('#page-certs input[value="365"]').value;
+  if (!cn) { toast('Enter a Common Name', 'err'); return; }
+  const res = await api('/api/ca/issue', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ common_name: cn, days: parseInt(days) || 365 })
+  });
+  if (res.status === 'ok') {
+    toast('Certificate issued for ' + cn, 'ok');
+    loadCerts();
+  } else {
+    toast(res.message, 'err');
+  }
+}
+
+async function inspectCert() {
+  const inp = document.querySelector('#page-certs .card:last-child input');
+  const val = inp.value.trim();
+  if (!val) { toast('Enter a certificate filename', 'err'); return; }
+  const res = await api('/api/ca/inspect', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ filename: val })
+  });
+  const cc = document.querySelector('#page-certs .cert-card');
+  if (res.status === 'ok') {
+    cc.innerHTML =
+      '<div class="cert-field"><span class="k">Subject</span><span class="v">' + res.subject + '</span></div>' +
+      '<div class="cert-field"><span class="k">Issuer</span><span class="v">' + res.issuer + '</span></div>' +
+      '<div class="cert-field"><span class="k">Serial</span><span class="v">' + res.serial + '</span></div>' +
+      '<div class="cert-field"><span class="k">Algorithm</span><span class="v">' + res.algorithm + '</span></div>' +
+      '<div class="cert-field"><span class="k">SHA-256 fingerprint</span><span class="v" style="font-size:9px">' + res.fingerprint + '</span></div>' +
+      '<div class="cert-field"><span class="k">Valid from</span><span class="v">' + res.valid_from + '</span></div>' +
+      '<div class="cert-field"><span class="k">Valid until</span><span class="v">' + res.valid_until + ' (' + res.days_left + ' days)</span></div>' +
+      '<div class="cert-field"><span class="k">Chain verified</span><span class="badge ' + (res.chain === 'TRUSTED' ? 'badge-ok' : 'badge-fail') + '">' + res.chain + '</span></div>';
+  } else {
+    toast(res.message, 'err');
+  }
+}
+
+// ── CRYPTO TOOLS ──────────────────────────────────
+
+async function cryptoRSA(action) {
+  const text = document.getElementById('rsa-in').value;
+  const keySel = document.getElementById('rsa-key').value;
+  let keyName = 'server';
+  if (keySel.includes('client-1')) keyName = 'client-1';
+  else if (keySel.includes('server-key')) keyName = 'server_key';
+
+  const out = document.getElementById('rsa-out');
+  out.style.color = 'var(--text3)';
+  out.textContent = 'Processing...';
+
+  const res = await api('/api/crypto/rsa', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: action, text: text, key_name: keyName })
+  });
+
+  if (res.status === 'ok') {
+    out.style.color = 'var(--green)';
+    out.textContent = '[' + new Date().toLocaleTimeString() + '] ' + (action === 'encrypt' ? 'RSA-OAEP encrypted' : 'RSA decrypted') + '\n\n' + (res.output || '');
+  } else {
+    out.style.color = 'var(--red)';
+    out.textContent = res.message;
+  }
+}
+
+async function cryptoAES(action) {
+  const text = document.getElementById('aes-in').value;
+  const keyHex = document.getElementById('aes-key').value;
+  const out = document.getElementById('aes-out');
+  out.style.color = 'var(--text3)';
+  out.textContent = 'Processing...';
+
+  let body = { action: action, text: text };
+  if (action === 'decrypt') {
+    // need iv_hex — use zeros for demo if not stored
+    body.key_hex = keyHex;
+    body.iv_hex = '00000000000000000000000000000000';
+  }
+
+  const res = await api('/api/crypto/aes', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+
+  if (res.status === 'ok') {
+    out.style.color = 'var(--green)';
+    let info = '[' + new Date().toLocaleTimeString() + '] ';
+    if (action === 'encrypt') {
+      info += 'AES-256-CBC encrypted\n\nOutput: ' + res.output + '\nKey:  ' + res.key_hex + '\nIV:   ' + res.iv_hex;
+      document.getElementById('aes-key').value = res.key_hex;
+    } else {
+      info += 'AES-256-CBC decrypted\n\n' + res.output;
+    }
+    out.textContent = info;
+  } else {
+    out.style.color = 'var(--red)';
+    out.textContent = res.message;
+  }
+}
+
+async function cryptoHash() {
+  const text = document.getElementById('hash-in').value;
+  const out = document.getElementById('hash-out');
+  out.style.color = 'var(--text3)';
+  out.textContent = 'Computing...';
+
+  const res = await api('/api/crypto/hash', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text: text })
+  });
+
+  if (res.status === 'ok') {
+    out.style.color = 'var(--green)';
+    out.textContent = '[' + new Date().toLocaleTimeString() + '] SHA-256\n\n' + res.hash;
+  } else {
+    out.style.color = 'var(--red)';
+    out.textContent = res.message;
+  }
+}
+
+async function cryptoSign(action) {
+  const hashHex = document.getElementById('sig-in').value.replace(/\s/g, '');
+  const out = document.getElementById('sig-out');
+  out.style.color = 'var(--text3)';
+  out.textContent = 'Processing...';
+
+  const body = { action: action, hash_hex: hashHex, key_name: 'client_1_key.pem' };
+  if (action === 'verify') {
+    const sigEl = out.getAttribute('data-sig');
+    body.signature_hex = sigEl || hashHex;
+  }
+
+  const res = await api('/api/crypto/sign', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+
+  if (res.status === 'ok') {
+    out.style.color = 'var(--green)';
+    if (action === 'sign') {
+      out.textContent = '[' + new Date().toLocaleTimeString() + '] Signature\n\n' + res.signature;
+      out.setAttribute('data-sig', res.signature);
+    } else {
+      out.textContent = '[' + new Date().toLocaleTimeString() + '] ' + res.output;
+    }
+  } else {
+    out.style.color = 'var(--red)';
+    out.textContent = res.message;
+  }
+}
+
+// ── AUDIT LOG ─────────────────────────────────────
+
+async function loadAuditLog() {
+  const filter = document.querySelector('#page-log select').value;
+  let level = 'all';
+  if (filter === 'Errors') level = 'err';
+  else if (filter === 'Connections') level = 'info';
+
+  const res = await api('/api/log?limit=100' + (level !== 'all' ? '&level=' + level : ''));
+  if (res.status !== 'ok' || !res.log) return;
+
+  const tbody = document.getElementById('log-tbody');
+  tbody.innerHTML = res.log.map(l => {
+    let badgeClass = 'badge-info';
+    if (l.level === 'ok') badgeClass = 'badge-ok';
+    else if (l.level === 'err') badgeClass = 'badge-fail';
+    return '<tr><td class="mono">' + l.time + '</td><td><span class="badge ' + badgeClass + '">' + l.level + '</span></td><td class="mono">' + l.actor + '</td><td>' + l.msg + '</td><td class="mono" style="font-size:10px"></td></tr>';
+  }).join('');
+
+  // sidebar count
+  const cnt = document.querySelector('.sidebar-item:nth-child(5) .sidebar-count');
+  if (cnt) cnt.textContent = res.log.length;
+}
+
+// ── E2E TEST ──────────────────────────────────────
+
+async function runTest() {
+  const div = document.getElementById('test-result');
+  div.style.display = 'block';
+  const lw = div.querySelector('.log-wrap');
+  lw.innerHTML = '<div class="log-row info"><span class="log-time">—</span><span class="log-msg">Running E2E test...</span></div>';
+
+  const res = await api('/api/client/test', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ client_name: 'test-client' })
+  });
+
+  if (res.status === 'ok') {
+    lw.innerHTML = (res.log || []).map(l =>
+      '<div class="log-row ' + (l.level || 'info') + '"><span class="log-time">' + (l.time || '—') + '</span><span class="log-msg">' + l.msg + '</span></div>'
+    ).join('') + '<div class="log-row ok"><span class="log-time">✓</span><span class="log-msg" style="font-weight:500;color:var(--green)">E2E TEST PASSED</span></div>';
+    toast('E2E test complete — all passed', 'ok');
+  } else {
+    lw.innerHTML += '<div class="log-row err"><span class="log-time">✗</span><span class="log-msg">' + res.message + '</span></div>';
+    toast('E2E test failed', 'err');
+  }
+}
+
+// ── INIT ──────────────────────────────────────────
 
 document.getElementById('rpanel').style.display = 'flex';
+
+document.getElementById('server-toggle-btn').addEventListener('click', toggleServer);
+document.getElementById('gen-ca-btn').addEventListener('click', generateCA);
+document.getElementById('issue-cert-btn').addEventListener('click', issueCert);
+document.getElementById('gen-sign-btn').addEventListener('click', issueCert);
+document.getElementById('inspect-cert-btn').addEventListener('click', inspectCert);
+document.getElementById('rsa-enc-btn').addEventListener('click', function() { cryptoRSA('encrypt'); });
+document.getElementById('rsa-dec-btn').addEventListener('click', function() { cryptoRSA('decrypt'); });
+document.getElementById('aes-enc-btn').addEventListener('click', function() { cryptoAES('encrypt'); });
+document.getElementById('aes-dec-btn').addEventListener('click', function() { cryptoAES('decrypt'); });
+document.getElementById('hash-btn').addEventListener('click', cryptoHash);
+document.getElementById('sign-btn').addEventListener('click', function() { cryptoSign('sign'); });
+document.getElementById('verify-btn').addEventListener('click', function() { cryptoSign('verify'); });
+document.getElementById('send-btn').addEventListener('click', sendFile);
+document.getElementById('dash-refresh-btn').addEventListener('click', loadDashboard);
+document.getElementById('e2e-test-btn').addEventListener('click', runTest);
+document.querySelector('#page-log select').addEventListener('change', loadAuditLog);
+
+loadDashboard();
 </script>
 </body>
 </html>

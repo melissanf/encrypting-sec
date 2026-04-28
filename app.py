@@ -5,7 +5,7 @@
 #  Open: http://localhost:5000
 # ============================================================
 
-import os, json, threading, datetime, base64
+import os, json, threading, datetime, base64, hashlib
 from flask import Flask, jsonify, request, send_from_directory
 from werkzeug.utils import secure_filename
 
@@ -24,6 +24,7 @@ from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
 # ── Imports Membre 3 (client) ──
 from client import SecureClient
+import crypto_utils
 
 app = Flask(__name__, static_folder='static')
 app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024
@@ -428,6 +429,121 @@ def api_log():
     if level != 'all':
         logs = [l for l in logs if l.get('level') == level]
     return jsonify({'status': 'ok', 'log': list(reversed(logs))[:limit]})
+
+
+# ══════════════════════════════════════════════
+#  CRYPTO TOOLS — interactive endpoints for frontend
+# ══════════════════════════════════════════════
+
+@app.route('/api/crypto/rsa', methods=['POST'])
+def api_crypto_rsa():
+    data     = request.get_json()
+    action   = data.get('action', 'encrypt')
+    text     = data.get('text', '')
+    key_name = data.get('key_name', 'server')
+    try:
+        if action == 'encrypt':
+            # public key: extract from certificate
+            cert_path = f'certs/{key_name}.pem'
+            if not os.path.exists(cert_path):
+                return jsonify({'status': 'error', 'message': f'Certificat introuvable: {cert_path}'}), 404
+            cert = load_certificate(cert_path)
+            pub  = cert.public_key()
+            enc  = crypto_utils.rsa_encrypt(pub, text.encode())
+            return jsonify({'status': 'ok', 'output': enc.hex()})
+        else:
+            # private key: load directly
+            key_path = f'keys/{key_name}_key.pem'
+            if not os.path.exists(key_path):
+                return jsonify({'status': 'error', 'message': f'Clé introuvable: {key_path}'}), 404
+            priv = crypto_utils.load_private_key(key_path)
+            dec  = crypto_utils.rsa_decrypt(priv, bytes.fromhex(text))
+            return jsonify({'status': 'ok', 'output': dec.decode(errors='replace')})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+@app.route('/api/crypto/aes', methods=['POST'])
+def api_crypto_aes():
+    data     = request.get_json()
+    action   = data.get('action', 'encrypt')
+    text     = data.get('text', '')
+    key_hex  = data.get('key_hex', '')
+    iv_hex   = data.get('iv_hex', '')
+    try:
+        if action == 'encrypt':
+            aes_key = os.urandom(32)
+            iv      = os.urandom(16)
+            pad_len = 16 - (len(text.encode()) % 16)
+            padded  = text.encode() + bytes([pad_len]) * pad_len
+            cipher  = Cipher(algorithms.AES(aes_key), modes.CBC(iv))
+            enc     = cipher.encryptor().update(padded) + cipher.encryptor().finalize()
+            return jsonify({
+                'status':  'ok',
+                'output':  enc.hex(),
+                'key_hex': aes_key.hex(),
+                'iv_hex':  iv.hex(),
+            })
+        else:
+            if not key_hex or not iv_hex:
+                return jsonify({'status': 'error', 'message': 'key_hex et iv_hex requis'}), 400
+            aes_key  = bytes.fromhex(key_hex)
+            iv       = bytes.fromhex(iv_hex)
+            cipher   = Cipher(algorithms.AES(aes_key), modes.CBC(iv))
+            dec      = cipher.decryptor().update(bytes.fromhex(text)) + cipher.decryptor().finalize()
+            pad_len  = dec[-1]
+            dec      = dec[:-pad_len]
+            return jsonify({'status': 'ok', 'output': dec.decode(errors='replace')})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+@app.route('/api/crypto/hash', methods=['POST'])
+def api_crypto_hash():
+    data = request.get_json()
+    text = data.get('text', '')
+    try:
+        h = hashlib.sha256(text.encode()).hexdigest()
+        return jsonify({'status': 'ok', 'hash': h})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+@app.route('/api/crypto/sign', methods=['POST'])
+def api_crypto_sign():
+    data     = request.get_json()
+    action   = data.get('action', 'sign')
+    hash_hex = data.get('hash_hex', '')
+    key_name = data.get('key_name', 'client_1_key.pem')
+    try:
+        priv = crypto_utils.load_private_key(f'keys/{key_name}')
+        if action == 'sign':
+            sig = priv.sign(
+                bytes.fromhex(hash_hex),
+                asym_padding.PSS(
+                    mgf=asym_padding.MGF1(hashes.SHA256()),
+                    salt_length=asym_padding.PSS.MAX_LENGTH
+                ),
+                hashes.SHA256()
+            )
+            return jsonify({'status': 'ok', 'signature': sig.hex()})
+        else:
+            pub = priv.public_key()
+            try:
+                pub.verify(
+                    bytes.fromhex(data.get('signature_hex', '')),
+                    bytes.fromhex(hash_hex),
+                    asym_padding.PSS(
+                        mgf=asym_padding.MGF1(hashes.SHA256()),
+                        salt_length=asym_padding.PSS.MAX_LENGTH
+                    ),
+                    hashes.SHA256()
+                )
+                return jsonify({'status': 'ok', 'output': 'Signature VALID — matches public key'})
+            except Exception:
+                return jsonify({'status': 'ok', 'output': 'Signature INVALID — does not match'})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
 
 
 # ══════════════════════════════════════════════
