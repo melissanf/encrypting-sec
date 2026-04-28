@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 import socket, ssl, json, os, base64
 from datetime import datetime
-from cryptography.hazmat.primitives import hashes, serialization, padding
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
 class MiniServer:
@@ -21,10 +22,14 @@ class MiniServer:
         print(f"📞 Client {addr[0]} connecté")
         try:
             cert = conn.getpeercert()
-            client = dict(x[0] for x in cert.get_subject().get_components()).get(b'CN', b'Client').decode()
+            subject = dict(x[0] for x in cert.get('subject', []))
+            client = subject.get('commonName', '127.0.0.1')
             
             # Métadonnées
-            meta = json.loads(conn.recv(4096).decode())
+            raw = b''; 
+            while b'\n' not in raw:
+                raw += conn.recv(4096)
+            meta = json.loads(raw.strip().decode())
             print(f"📁 Fichier: {meta['filename']} ({meta['file_size']} octets)")
             
             # Déchiffrer clé AES
@@ -65,7 +70,7 @@ class MiniServer:
             conn.close()
 
     def start(self):
-        context = ssl.create_ssl_context(ssl.PROTOCOL_TLS_SERVER)
+        context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
         context.load_cert_chain('server.crt', 'server.key')
         context.load_verify_locations('ca.crt')
         context.verify_mode = ssl.CERT_REQUIRED

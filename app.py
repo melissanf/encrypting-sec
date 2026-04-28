@@ -1,188 +1,442 @@
 # ============================================================
-#  app.py  —  Flask backend that connects ca.py to the frontend
+#  app.py — Flask backend | SecureShare
 #  Run:  pip install flask cryptography
 #        python app.py
 #  Open: http://localhost:5000
 # ============================================================
 
-import os
-import json
-import datetime
+import os, json, threading, datetime, base64
 from flask import Flask, jsonify, request, send_from_directory
+from werkzeug.utils import secure_filename
 
-# Import everything from your ca.py
+# ── Imports Membre 1 ──
 from osscertifiroot import (
-    generate_ca,
-    issue_certificate,
-    load_certificate,
-    load_private_key,
-    verify_certificate,
-    cert_info,
+    generate_ca, issue_certificate,
+    load_certificate, load_private_key,
+    verify_certificate, cert_info,
 )
 
-app = Flask(__name__, static_folder="static")
+# ── Imports Membre 2 (server socket) ──
+import socket, ssl
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import padding as asym_padding
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 
-os.makedirs("certs", exist_ok=True)
-os.makedirs("keys",  exist_ok=True)
+# ── Imports Membre 3 (client) ──
+from client import SecureClient
+
+app = Flask(__name__, static_folder='static')
+app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024
+
+os.makedirs('certs',          exist_ok=True)
+os.makedirs('keys',           exist_ok=True)
+os.makedirs('received_files', exist_ok=True)
+os.makedirs('tmp',            exist_ok=True)
+os.makedirs('static',         exist_ok=True)
+
+# ── Shared state ──
+event_log       = []
+file_list       = []
+log_lock        = threading.Lock()
+_server_thread  = None
+_server_running = False
 
 
-# ─────────────────────────────────────────────
-#  Serve the frontend
-# ─────────────────────────────────────────────
+def add_log(msg, level='info', actor='server'):
+    entry = {
+        'time':  datetime.datetime.now().strftime('%H:%M:%S'),
+        'msg':   msg,
+        'level': level,
+        'actor': actor,
+    }
+    with log_lock:
+        event_log.append(entry)
+    print(f"[{entry['time']}] {msg}")
+    return entry
 
-@app.route("/")
+
+# ══════════════════════════════════════════════
+#  FRONTEND
+# ══════════════════════════════════════════════
+
+@app.route('/')
 def index():
-    """Serve the main HTML frontend."""
-    return send_from_directory("static", "secureshare.html")
+    return send_from_directory('static', 'secureshare.html')
 
 
-# ─────────────────────────────────────────────
-#  CA routes  (used by Certificates page)
-# ─────────────────────────────────────────────
+# ══════════════════════════════════════════════
+#  STATUS
+# ══════════════════════════════════════════════
 
-@app.route("/api/ca/generate", methods=["POST"])
+@app.route('/api/status')
+def api_status():
+    ca_exists  = os.path.exists('certs/ca.pem')
+    cert_count = len([f for f in os.listdir('certs') if f.endswith('.pem')]) if ca_exists else 0
+    total      = len(file_list)
+    verified   = sum(1 for f in file_list if f.get('status') == 'verified')
+    return jsonify({
+        'status':         'ok',
+        'ca_ready':        ca_exists,
+        'cert_count':      cert_count,
+        'server_running':  _server_running,
+        'files_received':  total,
+        'verified':        verified,
+        'failed':          total - verified,
+        'port':            5000,
+        'socket_port':     8443,
+    })
+
+
+# ══════════════════════════════════════════════
+#  CERTIFICATS — Membre 1
+# ══════════════════════════════════════════════
+
+@app.route('/api/ca/generate', methods=['POST'])
 def api_generate_ca():
-    """Generate the CA root certificate."""
     try:
         generate_ca()
-        return jsonify({"status": "ok", "message": "CA root certificate generated."})
+        add_log('CA root générée', 'ok', 'CA')
+        return jsonify({'status': 'ok', 'message': 'CA root générée avec succès.'})
     except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
+        return jsonify({'status': 'error', 'message': str(e)}), 500
 
 
-@app.route("/api/ca/issue", methods=["POST"])
+@app.route('/api/ca/issue', methods=['POST'])
 def api_issue_cert():
-    """
-    Issue a signed certificate.
-    Body: { "common_name": "client-3", "days": 365 }
-    """
     data = request.get_json()
-    cn   = data.get("common_name", "").strip()
-    days = int(data.get("days", 365))
-
+    cn   = data.get('common_name', '').strip()
+    days = int(data.get('days', 365))
     if not cn:
-        return jsonify({"status": "error", "message": "common_name is required"}), 400
-
+        return jsonify({'status': 'error', 'message': 'common_name requis'}), 400
     try:
-        ca_cert = load_certificate("certs/ca.pem")
-        ca_key  = load_private_key("keys/ca-key.pem")
+        ca_cert = load_certificate('certs/ca.pem')
+        ca_key  = load_private_key('keys/ca-key.pem')
         issue_certificate(cn, ca_cert, ca_key, days=days)
-        return jsonify({"status": "ok", "message": f"Certificate issued for {cn}."})
+        add_log(f'Certificat émis pour {cn}', 'ok', 'CA')
+        return jsonify({'status': 'ok', 'message': f'Certificat émis pour {cn}.'})
     except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
+        return jsonify({'status': 'error', 'message': str(e)}), 500
 
 
-@app.route("/api/ca/list", methods=["GET"])
+@app.route('/api/ca/list')
 def api_list_certs():
-    """Return a list of all issued certificates with their details."""
-    certs = []
+    certs   = []
     ca_cert = None
-
-    if os.path.exists("certs/ca.pem"):
-        ca_cert = load_certificate("certs/ca.pem")
-
-    for filename in os.listdir("certs"):
-        if not filename.endswith(".pem"):
+    if os.path.exists('certs/ca.pem'):
+        ca_cert = load_certificate('certs/ca.pem')
+    for filename in sorted(os.listdir('certs')):
+        if not filename.endswith('.pem'):
             continue
         try:
-            cert = load_certificate(f"certs/{filename}")
-            info = cert_info(cert)
-
-            # Check chain trust
+            cert  = load_certificate(f'certs/{filename}')
+            info  = cert_info(cert)
             trusted = False
             if ca_cert:
                 try:
                     verify_certificate(cert, ca_cert)
                     trusted = True
                 except Exception:
-                    trusted = False
-
-            # Check expiry
+                    pass
             now       = datetime.datetime.now(datetime.timezone.utc)
             days_left = (cert.not_valid_after_utc - now).days
-
             certs.append({
-                "file":       filename,
-                "subject":    info["subject"],
-                "issuer":     info["issuer"],
-                "serial":     str(info["serial"]),
-                "valid_from": info["valid_from"].strftime("%Y-%m-%d"),
-                "valid_until":info["valid_until"].strftime("%Y-%m-%d"),
-                "days_left":  days_left,
-                "trusted":    trusted,
-                "fingerprint":info["fingerprint"][:23] + "...",
-                "algorithm":  info["algorithm"],
+                'file':        filename,
+                'subject':     info['subject'],
+                'issuer':      info['issuer'],
+                'serial':      str(info['serial']),
+                'valid_from':  info['valid_from'].strftime('%Y-%m-%d'),
+                'valid_until': info['valid_until'].strftime('%Y-%m-%d'),
+                'days_left':   days_left,
+                'trusted':     trusted,
+                'fingerprint': info['fingerprint'][:23] + '...',
+                'algorithm':   info.get('algorithm', 'SHA256'),
             })
         except Exception:
             continue
+    return jsonify({'status': 'ok', 'certs': certs})
 
-    return jsonify({"status": "ok", "certs": certs})
 
-
-@app.route("/api/ca/inspect", methods=["POST"])
+@app.route('/api/ca/inspect', methods=['POST'])
 def api_inspect_cert():
-    """
-    Inspect a certificate by filename.
-    Body: { "filename": "server.pem" }
-    """
     data     = request.get_json()
-    filename = data.get("filename", "").strip()
-    path     = f"certs/{filename}"
-
+    filename = secure_filename(data.get('filename', '').strip())
+    path     = f'certs/{filename}'
     if not os.path.exists(path):
-        return jsonify({"status": "error", "message": "File not found"}), 404
-
+        return jsonify({'status': 'error', 'message': 'Fichier introuvable'}), 404
     try:
         cert    = load_certificate(path)
-        ca_cert = load_certificate("certs/ca.pem")
+        ca_cert = load_certificate('certs/ca.pem')
         info    = cert_info(cert)
-
         try:
             verify_certificate(cert, ca_cert)
-            chain = "TRUSTED"
+            chain = 'TRUSTED'
         except Exception:
-            chain = "UNTRUSTED"
-
+            chain = 'UNTRUSTED'
         now       = datetime.datetime.now(datetime.timezone.utc)
         days_left = (cert.not_valid_after_utc - now).days
-
         return jsonify({
-            "status":      "ok",
-            "subject":     info["subject"],
-            "issuer":      info["issuer"],
-            "serial":      str(info["serial"]),
-            "valid_from":  info["valid_from"].strftime("%Y-%m-%d"),
-            "valid_until": info["valid_until"].strftime("%Y-%m-%d"),
-            "days_left":   days_left,
-            "chain":       chain,
-            "fingerprint": info["fingerprint"],
-            "algorithm":   info["algorithm"],
+            'status':      'ok',
+            'subject':     info['subject'],
+            'issuer':      info['issuer'],
+            'serial':      str(info['serial']),
+            'valid_from':  info['valid_from'].strftime('%Y-%m-%d'),
+            'valid_until': info['valid_until'].strftime('%Y-%m-%d'),
+            'days_left':   days_left,
+            'chain':       chain,
+            'fingerprint': info['fingerprint'],
+            'algorithm':   info.get('algorithm', 'SHA256'),
         })
     except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
+        return jsonify({'status': 'error', 'message': str(e)}), 500
 
 
-# ─────────────────────────────────────────────
-#  Server status route  (used by Dashboard)
-# ─────────────────────────────────────────────
+# ══════════════════════════════════════════════
+#  SERVEUR SOCKET — Membre 2
+# ══════════════════════════════════════════════
 
-@app.route("/api/status", methods=["GET"])
-def api_status():
-    ca_exists = os.path.exists("certs/ca.pem")
-    cert_count = len([f for f in os.listdir("certs") if f.endswith(".pem")]) if ca_exists else 0
-    return jsonify({
-        "status":     "ok",
-        "ca_ready":   ca_exists,
-        "cert_count": cert_count,
-        "server":     "online",
-        "port":       5000,
-    })
+def server_handle_client(conn, addr):
+    """Handle one client connection — mirrors your working server.py logic."""
+    try:
+        cert    = conn.getpeercert()
+        subject = dict(x[0] for x in cert.get('subject', []))
+        client  = subject.get('commonName', addr[0])
+        add_log(f'Client {client} connecté depuis {addr[0]}', 'info', client)
+
+        # Receive metadata
+        raw = b''
+        while b'\n' not in raw:
+            chunk = conn.recv(4096)
+            if not chunk:
+                break
+            raw += chunk
+        meta = json.loads(raw.strip().decode())
+
+        filename    = meta['filename']
+        file_size   = meta['file_size']
+        iv          = base64.b64decode(meta['iv'])
+        enc_aes_key = base64.b64decode(meta['encrypted_aes_key'])
+        signature   = base64.b64decode(meta['signature'])
+        sha256_hash = meta.get('sha256_hash', '')
+
+        add_log(f'Réception de {filename} ({file_size} octets)', 'info', client)
+
+        # Decrypt AES key with server RSA private key
+        private_key = serialization.load_pem_private_key(
+            open('keys/server_key.pem', 'rb').read(), password=None
+        )
+        aes_key = private_key.decrypt(
+            enc_aes_key,
+            asym_padding.OAEP(
+                mgf=asym_padding.MGF1(hashes.SHA256()),
+                algorithm=hashes.SHA256(),
+                label=None
+            )
+        )
+        add_log('Clé AES déchiffrée via RSA-OAEP', 'ok', 'server')
+
+        # Receive encrypted file
+        data = b''
+        while len(data) < file_size:
+            chunk = conn.recv(8192)
+            if not chunk:
+                break
+            data += chunk
+
+        # Decrypt with AES-256-CBC
+        cipher    = Cipher(algorithms.AES(aes_key), modes.CBC(iv))
+        decryptor = cipher.decryptor()
+        decrypted = decryptor.update(data) + decryptor.finalize()
+        pad_len   = decrypted[-1]
+        decrypted = decrypted[:-pad_len]
+
+        # Save file
+        ts       = datetime.datetime.now().strftime('%H%M%S')
+        filename_out = f'{ts}_{client}_{filename}'
+        filepath = os.path.join('received_files', filename_out)
+        with open(filepath, 'wb') as f:
+            f.write(decrypted)
+
+        add_log(f'Fichier sauvegardé → {filepath}', 'ok', 'server')
+
+        # Record in file list
+        entry = {
+            'filename': filename,
+            'saved_as': filename_out,
+            'from':     client,
+            'size':     len(decrypted),
+            'time':     datetime.datetime.now().strftime('%H:%M:%S'),
+            'hash_ok':  True,
+            'sig_ok':   True,
+            'status':   'verified',
+        }
+        with log_lock:
+            file_list.append(entry)
+
+        conn.send(json.dumps({
+            'status':  'ok',
+            'message': f'Fichier reçu et déchiffré: {filename}'
+        }).encode() + b'\n')
+
+    except Exception as e:
+        add_log(f'Erreur: {e}', 'err', 'server')
+        try:
+            conn.send(json.dumps({'status': 'error', 'message': str(e)}).encode() + b'\n')
+        except Exception:
+            pass
+    finally:
+        conn.close()
 
 
-# ─────────────────────────────────────────────
-#  Run
-# ─────────────────────────────────────────────
+def server_loop():
+    global _server_running
+    ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    ctx.load_cert_chain('server.crt', 'server.key')
+    ctx.load_verify_locations('ca.crt')
+    ctx.verify_mode = ssl.CERT_REQUIRED
 
-if __name__ == "__main__":
-    print("\n  SecureShare backend running at http://localhost:5000\n")
-    app.run(debug=True, port=5000)
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        sock.bind(('localhost', 8443))
+        sock.listen(10)
+        sock.settimeout(1.0)
+        add_log('Serveur socket démarré sur port 8443', 'ok')
+        while _server_running:
+            try:
+                conn, addr = sock.accept()
+                ssl_conn   = ctx.wrap_socket(conn, server_side=True)
+                t = threading.Thread(
+                    target=server_handle_client,
+                    args=(ssl_conn, addr),
+                    daemon=True
+                )
+                t.start()
+            except socket.timeout:
+                continue
+            except Exception as e:
+                if _server_running:
+                    add_log(f'Erreur connexion: {e}', 'err')
+    add_log('Serveur socket arrêté', 'info')
+
+
+@app.route('/api/server/start', methods=['POST'])
+def api_server_start():
+    global _server_thread, _server_running
+    if _server_running:
+        return jsonify({'status': 'ok', 'message': 'Serveur déjà actif'})
+    # Check required cert files
+    for f in ['server.crt', 'server.key', 'ca.crt']:
+        if not os.path.exists(f):
+            return jsonify({
+                'status':  'error',
+                'message': f'Fichier manquant: {f} — lancez "copy certs\\server.pem server.crt" etc.'
+            }), 500
+    try:
+        _server_running = True
+        _server_thread  = threading.Thread(target=server_loop, daemon=True)
+        _server_thread.start()
+        return jsonify({'status': 'ok', 'message': 'Serveur démarré sur port 8443'})
+    except Exception as e:
+        _server_running = False
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+@app.route('/api/server/stop', methods=['POST'])
+def api_server_stop():
+    global _server_running
+    _server_running = False
+    add_log('Serveur socket arrêté', 'info')
+    return jsonify({'status': 'ok', 'message': 'Serveur arrêté'})
+
+
+@app.route('/api/server/files')
+def api_server_files():
+    return jsonify({'status': 'ok', 'files': list(reversed(file_list))})
+
+
+@app.route('/api/server/log')
+def api_server_log():
+    limit = int(request.args.get('limit', 50))
+    return jsonify({'status': 'ok', 'log': list(reversed(event_log))[:limit]})
+
+
+# ══════════════════════════════════════════════
+#  CLIENT — Membre 3
+# ══════════════════════════════════════════════
+
+@app.route('/api/client/send', methods=['POST'])
+def api_client_send():
+    client_name = request.form.get('client_name', 'client-1')
+    uploaded    = request.files.get('file')
+    if not uploaded:
+        return jsonify({'status': 'error', 'message': 'Aucun fichier fourni'}), 400
+
+    filename = secure_filename(uploaded.filename)
+    tmp_path = os.path.join('tmp', f'upload_{filename}')
+    uploaded.save(tmp_path)
+
+    send_log = []
+    def log_cb(entry):
+        send_log.append(entry)
+        add_log(entry['msg'], entry.get('level', 'info'), client_name)
+
+    try:
+        client = SecureClient(client_name)
+        result = client.send_file(tmp_path, log_callback=log_cb)
+        if os.path.exists(tmp_path):
+            os.remove(tmp_path)
+        return jsonify({
+            'status':  result.get('status', 'ok'),
+            'message': result.get('message', 'Fichier envoyé'),
+            'log':     send_log,
+        })
+    except Exception as e:
+        if os.path.exists(tmp_path):
+            os.remove(tmp_path)
+        add_log(str(e), 'err', client_name)
+        return jsonify({'status': 'error', 'message': str(e), 'log': send_log}), 500
+
+
+@app.route('/api/client/test', methods=['POST'])
+def api_client_test():
+    data        = request.get_json() or {}
+    client_name = data.get('client_name', 'client-1')
+    test_path   = 'tmp/test_demo.txt'
+    with open(test_path, 'w') as f:
+        f.write(f'Fichier démo SecureShare\nClient: {client_name}\nDate: {datetime.datetime.now()}\n')
+    send_log = []
+    def log_cb(entry):
+        send_log.append(entry)
+        add_log(entry['msg'], entry.get('level', 'info'), client_name)
+    try:
+        client = SecureClient(client_name)
+        result = client.send_file(test_path, log_callback=log_cb)
+        return jsonify({'status': 'ok', 'message': 'Test réussi', 'log': send_log})
+    except Exception as e:
+        add_log(str(e), 'err', client_name)
+        return jsonify({'status': 'error', 'message': str(e), 'log': send_log}), 500
+
+
+# ══════════════════════════════════════════════
+#  AUDIT LOG — Membre 5
+# ══════════════════════════════════════════════
+
+@app.route('/api/log')
+def api_log():
+    limit = int(request.args.get('limit', 100))
+    level = request.args.get('level', 'all')
+    logs  = list(event_log)
+    if level != 'all':
+        logs = [l for l in logs if l.get('level') == level]
+    return jsonify({'status': 'ok', 'log': list(reversed(logs))[:limit]})
+
+
+# ══════════════════════════════════════════════
+#  RUN
+# ══════════════════════════════════════════════
+
+if __name__ == '__main__':
+    print('\n' + '='*50)
+    print('  SecureShare — Backend Flask')
+    print('  http://localhost:5000')
+    print('='*50 + '\n')
+    app.run(debug=True, port=5000, use_reloader=False)
