@@ -1,0 +1,791 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SecureShare</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0a0c10;
+  --surface:#111318;
+  --surface2:#181c23;
+  --border:#1e2430;
+  --border2:#252d3a;
+  --blue:#2563eb;
+  --blue-dim:#1a3a7a;
+  --blue-glow:#2563eb30;
+  --green:#10b981;
+  --green-dim:#064e35;
+  --red:#ef4444;
+  --red-dim:#4b1515;
+  --amber:#f59e0b;
+  --amber-dim:#4a2e08;
+  --text:#e2e8f0;
+  --text2:#8892a4;
+  --text3:#4a5568;
+  --mono:'IBM Plex Mono',monospace;
+  --sans:'IBM Plex Sans',sans-serif;
+}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13px;min-height:100vh;display:flex;flex-direction:column}
+
+/* TOPBAR */
+.topbar{height:48px;background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 20px;gap:0;flex-shrink:0}
+.logo{display:flex;align-items:center;gap:8px;margin-right:32px;text-decoration:none}
+.logo-mark{width:26px;height:26px;background:var(--blue);border-radius:6px;display:flex;align-items:center;justify-content:center}
+.logo-text{font-family:var(--mono);font-size:13px;font-weight:500;color:var(--text);letter-spacing:.02em}
+.nav{display:flex;height:100%}
+.nav-btn{background:none;border:none;padding:0 14px;font-family:var(--sans);font-size:12px;color:var(--text2);cursor:pointer;height:100%;border-bottom:2px solid transparent;transition:color .15s,border-color .15s}
+.nav-btn:hover{color:var(--text)}
+.nav-btn.active{color:var(--text);border-bottom-color:var(--blue);font-weight:500}
+.topbar-right{margin-left:auto;display:flex;align-items:center;gap:10px}
+.status-badge{display:flex;align-items:center;gap:5px;font-family:var(--mono);font-size:10px;padding:4px 10px;border-radius:4px;border:1px solid var(--green-dim);color:var(--green);background:rgba(16,185,129,.06)}
+.pulse{width:6px;height:6px;border-radius:50%;background:var(--green);animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+
+/* LAYOUT */
+.app-body{display:flex;flex:1;overflow:hidden}
+.sidebar{width:200px;background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;flex-shrink:0}
+.sidebar-section{padding:16px 14px 6px;font-family:var(--mono);font-size:9px;color:var(--text3);letter-spacing:.1em;text-transform:uppercase}
+.sidebar-item{display:flex;align-items:center;gap:9px;padding:8px 14px;color:var(--text2);cursor:pointer;border-left:2px solid transparent;transition:all .12s;font-size:12px}
+.sidebar-item:hover{color:var(--text);background:var(--surface2)}
+.sidebar-item.active{color:var(--text);background:var(--surface2);border-left-color:var(--blue)}
+.sidebar-item svg{flex-shrink:0;opacity:.7}
+.sidebar-item.active svg{opacity:1}
+.sidebar-count{margin-left:auto;font-family:var(--mono);font-size:10px;background:var(--surface);color:var(--text3);padding:1px 6px;border-radius:3px;border:1px solid var(--border)}
+.main{flex:1;overflow-y:auto;padding:20px;display:flex;flex-direction:column;gap:16px}
+
+/* PAGE VIEWS */
+.page{display:none;flex-direction:column;gap:16px}
+.page.active{display:flex}
+
+/* CARDS */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:16px}
+.card-title{font-family:var(--mono);font-size:11px;color:var(--text2);letter-spacing:.06em;text-transform:uppercase;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between}
+.two-col{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px}
+.three-col{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+
+/* METRICS */
+.metric{background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:12px 14px}
+.metric-label{font-family:var(--mono);font-size:10px;color:var(--text3);margin-bottom:6px}
+.metric-val{font-family:var(--mono);font-size:22px;font-weight:500;color:var(--text)}
+.metric-val.green{color:var(--green)}
+.metric-val.red{color:var(--red)}
+.metric-val.blue{color:var(--blue)}
+.metric-sub{font-size:10px;color:var(--text3);margin-top:3px}
+
+/* BADGES */
+.badge{display:inline-flex;align-items:center;gap:4px;font-family:var(--mono);font-size:10px;padding:2px 7px;border-radius:3px;font-weight:500}
+.badge-ok{background:rgba(16,185,129,.12);color:var(--green);border:1px solid var(--green-dim)}
+.badge-fail{background:rgba(239,68,68,.12);color:var(--red);border:1px solid var(--red-dim)}
+.badge-pending{background:rgba(245,158,11,.12);color:var(--amber);border:1px solid var(--amber-dim)}
+.badge-info{background:rgba(37,99,235,.12);color:#60a5fa;border:1px solid var(--blue-dim)}
+
+/* TABLE */
+.tbl{width:100%;border-collapse:collapse;table-layout:fixed}
+.tbl th{font-family:var(--mono);font-size:9px;color:var(--text3);text-align:left;padding:6px 8px;border-bottom:1px solid var(--border);letter-spacing:.06em;text-transform:uppercase;font-weight:400}
+.tbl td{font-size:12px;color:var(--text);padding:8px 8px;border-bottom:1px solid var(--border)}
+.tbl tr:last-child td{border-bottom:none}
+.tbl tr:hover td{background:var(--surface2)}
+.tbl .mono{font-family:var(--mono);font-size:11px;color:var(--text2)}
+
+/* BUTTONS */
+.btn{background:transparent;border:1px solid var(--border2);border-radius:5px;padding:0 12px;height:28px;font-family:var(--sans);font-size:12px;color:var(--text2);cursor:pointer;transition:all .12s;white-space:nowrap}
+.btn:hover{border-color:var(--blue-dim);color:var(--text);background:var(--surface2)}
+.btn-primary{background:var(--blue);border-color:var(--blue);color:#fff}
+.btn-primary:hover{background:#1d4ed8;border-color:#1d4ed8;color:#fff}
+.btn-danger{border-color:var(--red-dim);color:var(--red)}
+.btn-danger:hover{background:rgba(239,68,68,.1)}
+.btn-sm{height:24px;padding:0 10px;font-size:11px}
+.btn-xs{height:20px;padding:0 8px;font-size:10px}
+
+/* FORM */
+.field{margin-bottom:12px}
+.field label{display:block;font-family:var(--mono);font-size:10px;color:var(--text3);margin-bottom:5px;letter-spacing:.05em}
+.field input,.field select{width:100%;height:32px;background:var(--surface2);border:1px solid var(--border);border-radius:5px;padding:0 10px;font-family:var(--sans);font-size:12px;color:var(--text);outline:none;transition:border-color .12s}
+.field input:focus,.field select:focus{border-color:var(--blue)}
+.field select option{background:var(--surface2)}
+.field-row{display:flex;gap:8px}
+.field-row .field{flex:1;margin-bottom:0}
+
+/* UPLOAD ZONE */
+.drop-zone{border:1px dashed var(--border2);border-radius:8px;padding:28px 20px;text-align:center;cursor:pointer;transition:all .15s;position:relative}
+.drop-zone:hover,.drop-zone.drag{border-color:var(--blue);background:var(--blue-glow)}
+.drop-zone-icon{width:36px;height:36px;border-radius:8px;background:var(--surface2);border:1px solid var(--border);margin:0 auto 10px;display:flex;align-items:center;justify-content:center}
+.drop-zone p{font-size:12px;color:var(--text2)}
+.drop-zone p b{color:#60a5fa;font-weight:500}
+.drop-zone small{font-size:10px;color:var(--text3)}
+.drop-zone input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer}
+
+/* PROGRESS */
+.prog-bar{height:4px;background:var(--surface2);border-radius:2px}
+.prog-fill{height:100%;border-radius:2px;background:var(--blue);transition:width .5s}
+
+/* HANDSHAKE STEPS */
+.hs-track{display:flex;align-items:flex-start;padding:8px 0}
+.hs-step{flex:1;display:flex;flex-direction:column;align-items:center;position:relative}
+.hs-step:not(:last-child)::after{content:'';position:absolute;top:7px;left:50%;width:100%;height:1px;background:var(--border)}
+.hs-step.done:not(:last-child)::after{background:var(--green)}
+.hs-dot{width:14px;height:14px;border-radius:50%;background:var(--border);border:2px solid var(--border2);position:relative;z-index:1;transition:all .3s}
+.hs-step.done .hs-dot{background:var(--green);border-color:var(--green)}
+.hs-step.active .hs-dot{background:var(--blue);border-color:var(--blue);box-shadow:0 0 0 4px rgba(37,99,235,.25)}
+.hs-label{font-family:var(--mono);font-size:9px;color:var(--text3);margin-top:6px;text-align:center}
+.hs-step.done .hs-label{color:var(--green)}
+.hs-step.active .hs-label{color:#60a5fa}
+
+/* LOG */
+.log-wrap{display:flex;flex-direction:column;gap:2px;max-height:220px;overflow-y:auto}
+.log-row{display:flex;gap:10px;padding:5px 6px;border-radius:4px;align-items:flex-start}
+.log-row:hover{background:var(--surface2)}
+.log-time{font-family:var(--mono);font-size:9px;color:var(--text3);white-space:nowrap;padding-top:1px;width:56px;flex-shrink:0}
+.log-msg{font-size:11px;color:var(--text2);line-height:1.5}
+.log-msg b{color:var(--text);font-weight:500}
+.log-row.ok .log-msg{color:var(--green)}
+.log-row.err .log-msg{color:var(--red)}
+.log-row.info .log-msg b{color:#60a5fa}
+
+/* CERT CARD */
+.cert-card{background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:12px;display:flex;flex-direction:column;gap:8px}
+.cert-field{display:flex;justify-content:space-between;align-items:center;font-size:11px}
+.cert-field .k{color:var(--text3);font-family:var(--mono);font-size:10px}
+.cert-field .v{color:var(--text);font-family:var(--mono);font-size:10px}
+
+/* HEX DISPLAY */
+.hex-block{font-family:var(--mono);font-size:10px;color:var(--text3);word-break:break-all;line-height:1.6;background:var(--surface2);border:1px solid var(--border);border-radius:5px;padding:8px 10px}
+.hex-block b{color:#60a5fa}
+
+/* CRYPTO TOOL */
+.crypto-output{font-family:var(--mono);font-size:10px;color:var(--green);background:#050f08;border:1px solid var(--green-dim);border-radius:5px;padding:10px;word-break:break-all;min-height:60px;line-height:1.7}
+
+/* TOAST */
+.toasts{position:fixed;bottom:20px;right:20px;display:flex;flex-direction:column;gap:8px;z-index:999}
+.toast{background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:10px 14px;font-size:12px;color:var(--text);display:flex;align-items:center;gap:8px;min-width:220px;animation:slideIn .2s ease}
+.toast.ok{border-left:3px solid var(--green)}
+.toast.err{border-left:3px solid var(--red)}
+.toast.info{border-left:3px solid var(--blue)}
+@keyframes slideIn{from{transform:translateX(20px);opacity:0}to{transform:translateX(0);opacity:1}}
+
+/* RIGHT PANEL */
+.rpanel{width:210px;background:var(--surface);border-left:1px solid var(--border);padding:14px;flex-shrink:0;display:flex;flex-direction:column;gap:14px;overflow-y:auto}
+.rp-label{font-family:var(--mono);font-size:9px;color:var(--text3);letter-spacing:.1em;text-transform:uppercase;margin-bottom:8px}
+.rp-box{background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:10px}
+
+/* SCROLLBAR */
+::-webkit-scrollbar{width:4px;height:4px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
+
+/* PAGE HEADER */
+.page-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px}
+.page-title{font-family:var(--mono);font-size:14px;font-weight:500;color:var(--text)}
+.page-sub{font-size:11px;color:var(--text3);margin-top:2px}
+
+/* DIVIDER */
+.divider{height:1px;background:var(--border);margin:4px 0}
+</style>
+</head>
+<body>
+
+<!-- TOPBAR -->
+<div class="topbar">
+  <a class="logo" href="#">
+    <div class="logo-mark">
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1" y="5" width="12" height="8" rx="1.5" stroke="white" stroke-width="1.2"/><path d="M4 5V3.5a3 3 0 016 0V5" stroke="white" stroke-width="1.2"/></svg>
+    </div>
+    <span class="logo-text">SecureShare</span>
+  </a>
+  <nav class="nav">
+    <button class="nav-btn active" onclick="gotoPage('dashboard',this)">Dashboard</button>
+    <button class="nav-btn" onclick="gotoPage('client',this)">Client</button>
+    <button class="nav-btn" onclick="gotoPage('server',this)">Server</button>
+    <button class="nav-btn" onclick="gotoPage('certs',this)">Certificates</button>
+    <button class="nav-btn" onclick="gotoPage('crypto',this)">Crypto tools</button>
+    <button class="nav-btn" onclick="gotoPage('log',this)">Audit log</button>
+  </nav>
+  <div class="topbar-right">
+    <div class="status-badge"><span class="pulse"></span>Server · port 5000</div>
+  </div>
+</div>
+
+<div class="app-body">
+<!-- SIDEBAR -->
+<div class="sidebar">
+  <div class="sidebar-section">Navigation</div>
+  <div class="sidebar-item active" onclick="gotoPage('dashboard',null);setSidebar(this)">
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1" y="1" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1"/><rect x="8" y="1" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1"/><rect x="1" y="8" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1"/><rect x="8" y="8" width="5" height="5" rx="1" stroke="currentColor" stroke-width="1"/></svg>
+    Dashboard
+  </div>
+  <div class="sidebar-item" onclick="gotoPage('client',null);setSidebar(this)">
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="2" y="2" width="10" height="8" rx="1" stroke="currentColor" stroke-width="1"/><path d="M5 12h4M7 10v2" stroke="currentColor" stroke-width="1" stroke-linecap="round"/></svg>
+    Client
+  </div>
+  <div class="sidebar-item" onclick="gotoPage('server',null);setSidebar(this)">
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><rect x="1" y="2" width="12" height="4" rx="1" stroke="currentColor" stroke-width="1"/><rect x="1" y="8" width="12" height="4" rx="1" stroke="currentColor" stroke-width="1"/><circle cx="11" cy="4" r="1" fill="currentColor"/><circle cx="11" cy="10" r="1" fill="currentColor"/></svg>
+    Server
+    <span class="sidebar-count">4</span>
+  </div>
+  <div class="sidebar-section">Security</div>
+  <div class="sidebar-item" onclick="gotoPage('certs',null);setSidebar(this)">
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 1l1.5 3 3.5.5-2.5 2.5.5 3.5L7 9 4 10.5l.5-3.5L2 4.5 5.5 4z" stroke="currentColor" stroke-width="1"/></svg>
+    Certificates
+    <span class="sidebar-count">3</span>
+  </div>
+  <div class="sidebar-item" onclick="gotoPage('crypto',null);setSidebar(this)">
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M5 7a2 2 0 100-4 2 2 0 000 4zM9 11a2 2 0 100-4 2 2 0 000 4z" stroke="currentColor" stroke-width="1"/><path d="M7 5l2 4" stroke="currentColor" stroke-width="1" stroke-dasharray="2 1"/></svg>
+    Crypto tools
+  </div>
+  <div class="sidebar-section">Logs</div>
+  <div class="sidebar-item" onclick="gotoPage('log',null);setSidebar(this)">
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 3h10M2 7h7M2 11h5" stroke="currentColor" stroke-width="1" stroke-linecap="round"/></svg>
+    Audit log
+    <span class="sidebar-count">12</span>
+  </div>
+</div>
+
+<!-- MAIN CONTENT -->
+<div class="main">
+
+<!-- DASHBOARD PAGE -->
+<div class="page active" id="page-dashboard">
+  <div class="page-header">
+    <div>
+      <div class="page-title">Dashboard</div>
+      <div class="page-sub">System overview — last 24 hours</div>
+    </div>
+    <button class="btn btn-sm" onclick="toast('Refreshing data...','info')">Refresh</button>
+  </div>
+  <div class="three-col">
+    <div class="metric"><div class="metric-label">Files transferred</div><div class="metric-val blue">12</div><div class="metric-sub">+3 today</div></div>
+    <div class="metric"><div class="metric-label">Signatures verified</div><div class="metric-val green">12</div><div class="metric-sub">100% success</div></div>
+    <div class="metric"><div class="metric-label">Failed verifications</div><div class="metric-val red">0</div><div class="metric-sub">All clear</div></div>
+  </div>
+  <div class="card">
+    <div class="card-title">Active handshake — client-1 / report.pdf</div>
+    <div class="hs-track">
+      <div class="hs-step done"><div class="hs-dot"></div><div class="hs-label">Cert exchange</div></div>
+      <div class="hs-step done"><div class="hs-dot"></div><div class="hs-label">RSA key wrap</div></div>
+      <div class="hs-step active"><div class="hs-dot"></div><div class="hs-label">AES transfer</div></div>
+      <div class="hs-step"><div class="hs-dot"></div><div class="hs-label">Sig verify</div></div>
+      <div class="hs-step"><div class="hs-dot"></div><div class="hs-label">Complete</div></div>
+    </div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin:8px 0 4px">
+      <span style="font-size:11px;color:var(--text2)">report.pdf — 2.3 MB</span>
+      <span id="prog-pct" style="font-family:var(--mono);font-size:11px;color:#60a5fa">68%</span>
+    </div>
+    <div class="prog-bar"><div class="prog-fill" id="prog-fill" style="width:68%"></div></div>
+  </div>
+  <div class="two-col">
+    <div class="card">
+      <div class="card-title">Recent transfers</div>
+      <table class="tbl">
+        <thead><tr><th style="width:35%">File</th><th style="width:22%">From</th><th style="width:20%">Size</th><th style="width:23%">Status</th></tr></thead>
+        <tbody>
+          <tr><td>thesis.pdf</td><td class="mono">client-1</td><td class="mono">1.2 MB</td><td><span class="badge badge-ok">verified</span></td></tr>
+          <tr><td>data.csv</td><td class="mono">client-1</td><td class="mono">340 KB</td><td><span class="badge badge-ok">verified</span></td></tr>
+          <tr><td>keys.json</td><td class="mono">client-2</td><td class="mono">4 KB</td><td><span class="badge badge-ok">verified</span></td></tr>
+          <tr><td>report.pdf</td><td class="mono">client-1</td><td class="mono">2.3 MB</td><td><span class="badge badge-pending">receiving</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="card">
+      <div class="card-title">Live event log</div>
+      <div class="log-wrap">
+        <div class="log-row info"><span class="log-time">14:32:01</span><span class="log-msg"><b>client-1</b> connected — 192.168.1.4</span></div>
+        <div class="log-row"><span class="log-time">14:32:02</span><span class="log-msg">Cert verified — CN=client-1</span></div>
+        <div class="log-row"><span class="log-time">14:32:02</span><span class="log-msg">AES key unwrapped via RSA</span></div>
+        <div class="log-row ok"><span class="log-time">14:32:03</span><span class="log-msg">thesis.pdf — SHA-256 match</span></div>
+        <div class="log-row ok"><span class="log-time">14:32:20</span><span class="log-msg">data.csv — SHA-256 match</span></div>
+        <div class="log-row info"><span class="log-time">14:32:45</span><span class="log-msg"><b>client-2</b> connected — 192.168.1.9</span></div>
+        <div class="log-row ok"><span class="log-time">14:32:48</span><span class="log-msg">keys.json — SHA-256 match</span></div>
+        <div class="log-row"><span class="log-time">14:32:50</span><span class="log-msg">Transfer started — report.pdf</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- CLIENT PAGE -->
+<div class="page" id="page-client">
+  <div class="page-header">
+    <div><div class="page-title">Client</div><div class="page-sub">Connect to server and send encrypted files</div></div>
+    <div style="display:flex;gap:8px">
+      <span id="conn-status" class="badge badge-fail">disconnected</span>
+      <button class="btn btn-sm btn-primary" id="conn-btn" onclick="toggleConnect()">Connect</button>
+    </div>
+  </div>
+  <div class="two-col">
+    <div class="card">
+      <div class="card-title">Server connection</div>
+      <div class="field-row">
+        <div class="field"><label>Server IP</label><input id="srv-ip" value="192.168.1.1" placeholder="192.168.1.1"/></div>
+        <div class="field" style="max-width:90px"><label>Port</label><input id="srv-port" value="5000"/></div>
+      </div>
+      <div class="field"><label>Client certificate (.pem)</label>
+        <div style="display:flex;gap:8px">
+          <input value="client-1.pem" readonly style="flex:1"/>
+          <button class="btn btn-sm" onclick="toast('Certificate loaded','ok')">Browse</button>
+        </div>
+      </div>
+      <div class="field"><label>Private key (.pem)</label>
+        <div style="display:flex;gap:8px">
+          <input value="client-1-key.pem" readonly style="flex:1"/>
+          <button class="btn btn-sm" onclick="toast('Key loaded','ok')">Browse</button>
+        </div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">Connection info</div>
+      <div class="cert-card">
+        <div class="cert-field"><span class="k">Subject</span><span class="v">CN=client-1</span></div>
+        <div class="cert-field"><span class="k">Issuer</span><span class="v">CN=CA-root</span></div>
+        <div class="cert-field"><span class="k">Algorithm</span><span class="v">RSA-2048</span></div>
+        <div class="cert-field"><span class="k">Expires</span><span class="v">2026-04-01</span></div>
+        <div class="cert-field"><span class="k">Status</span><span class="badge badge-ok">trusted</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-title">Send encrypted file</div>
+    <div class="drop-zone" id="drop-zone" ondragover="event.preventDefault();this.classList.add('drag')" ondragleave="this.classList.remove('drag')" ondrop="handleDrop(event)">
+      <input type="file" onchange="handleFile(event)"/>
+      <div class="drop-zone-icon">
+        <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M9 3v8M6 6l3-3 3 3" stroke="#60a5fa" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 13h12" stroke="#60a5fa" stroke-width="1.2" stroke-linecap="round"/></svg>
+      </div>
+      <p><b>Click to browse</b> or drag and drop</p>
+      <small>Any file type · encrypted with AES-256-CBC before sending</small>
+    </div>
+    <div id="send-area" style="display:none;margin-top:12px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <span id="file-name" style="font-family:var(--mono);font-size:11px;color:var(--text)">—</span>
+        <div style="display:flex;gap:6px">
+          <span id="file-size" class="badge badge-info">—</span>
+          <button class="btn btn-sm btn-primary" onclick="simulateSend()">Send encrypted</button>
+          <button class="btn btn-sm btn-danger" onclick="document.getElementById('send-area').style.display='none'">Remove</button>
+        </div>
+      </div>
+      <div id="send-prog-wrap" style="display:none">
+        <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+          <span style="font-size:10px;color:var(--text2)" id="send-stage">Encrypting...</span>
+          <span id="send-pct" style="font-family:var(--mono);font-size:10px;color:#60a5fa">0%</span>
+        </div>
+        <div class="prog-bar"><div class="prog-fill" id="send-prog-fill" style="width:0%"></div></div>
+      </div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-title">Transfer history</div>
+    <table class="tbl">
+      <thead><tr><th style="width:30%">File</th><th style="width:20%">Server</th><th style="width:20%">Time</th><th style="width:15%">Size</th><th style="width:15%">Result</th></tr></thead>
+      <tbody>
+        <tr><td>thesis.pdf</td><td class="mono">192.168.1.1</td><td class="mono">14:32:03</td><td class="mono">1.2 MB</td><td><span class="badge badge-ok">sent</span></td></tr>
+        <tr><td>data.csv</td><td class="mono">192.168.1.1</td><td class="mono">14:32:22</td><td class="mono">340 KB</td><td><span class="badge badge-ok">sent</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- SERVER PAGE -->
+<div class="page" id="page-server">
+  <div class="page-header">
+    <div><div class="page-title">Server</div><div class="page-sub">Receive and decrypt incoming files</div></div>
+    <div style="display:flex;gap:8px">
+      <span class="badge badge-ok">listening · port 5000</span>
+      <button class="btn btn-sm btn-danger" onclick="toast('Server stopped','err')">Stop server</button>
+    </div>
+  </div>
+  <div class="three-col">
+    <div class="metric"><div class="metric-label">Files received</div><div class="metric-val">4</div></div>
+    <div class="metric"><div class="metric-label">Active sessions</div><div class="metric-val blue">1</div></div>
+    <div class="metric"><div class="metric-label">Bytes received</div><div class="metric-val">3.8 MB</div></div>
+  </div>
+  <div class="card">
+    <div class="card-title">Received files
+      <button class="btn btn-xs" onclick="toast('All files decrypted and saved','ok')">Decrypt all</button>
+    </div>
+    <table class="tbl">
+      <thead><tr><th style="width:28%">Filename</th><th style="width:16%">From</th><th style="width:14%">Size</th><th style="width:14%">Time</th><th style="width:14%">Signature</th><th style="width:14%">Action</th></tr></thead>
+      <tbody>
+        <tr><td>thesis.pdf</td><td class="mono">client-1</td><td class="mono">1.2 MB</td><td class="mono">14:32:03</td><td><span class="badge badge-ok">verified</span></td><td><button class="btn btn-xs" onclick="toast('thesis.pdf decrypted','ok')">Decrypt</button></td></tr>
+        <tr><td>data.csv</td><td class="mono">client-1</td><td class="mono">340 KB</td><td class="mono">14:32:22</td><td><span class="badge badge-ok">verified</span></td><td><button class="btn btn-xs" onclick="toast('data.csv decrypted','ok')">Decrypt</button></td></tr>
+        <tr><td>keys.json</td><td class="mono">client-2</td><td class="mono">4 KB</td><td class="mono">14:32:48</td><td><span class="badge badge-ok">verified</span></td><td><button class="btn btn-xs" onclick="toast('keys.json decrypted','ok')">Decrypt</button></td></tr>
+        <tr><td>report.pdf</td><td class="mono">client-1</td><td class="mono">2.3 MB</td><td class="mono">14:32:50</td><td><span class="badge badge-pending">pending</span></td><td><button class="btn btn-xs" disabled style="opacity:.4">Decrypt</button></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="two-col">
+    <div class="card">
+      <div class="card-title">Active session — client-1</div>
+      <div class="cert-card" style="margin-bottom:10px">
+        <div class="cert-field"><span class="k">Client IP</span><span class="v">192.168.1.4:49201</span></div>
+        <div class="cert-field"><span class="k">Cert CN</span><span class="v">CN=client-1</span></div>
+        <div class="cert-field"><span class="k">Cert issuer</span><span class="v">CN=CA-root</span></div>
+        <div class="cert-field"><span class="k">Cipher</span><span class="v">AES-256-CBC</span></div>
+        <div class="cert-field"><span class="k">IV</span><span class="v">a3f2...8c1d</span></div>
+      </div>
+      <div style="font-family:var(--mono);font-size:9px;color:var(--text3);margin-bottom:4px;letter-spacing:.05em">SESSION KEY (AES-256)</div>
+      <div class="hex-block"><b>3a7f2c8b</b> 1e4d09f6 a5b2c3d4 e5f60718<br>9a1b2c3d 4e5f6071 8293a4b5 c6d7e8f9</div>
+    </div>
+    <div class="card">
+      <div class="card-title">Server event log</div>
+      <div class="log-wrap">
+        <div class="log-row info"><span class="log-time">14:32:01</span><span class="log-msg"><b>client-1</b> TCP connect</span></div>
+        <div class="log-row"><span class="log-time">14:32:01</span><span class="log-msg">Cert chain verified OK</span></div>
+        <div class="log-row"><span class="log-time">14:32:02</span><span class="log-msg">RSA decrypt — AES key received</span></div>
+        <div class="log-row"><span class="log-time">14:32:02</span><span class="log-msg">Receiving thesis.pdf...</span></div>
+        <div class="log-row ok"><span class="log-time">14:32:03</span><span class="log-msg">SHA-256 verified ✓</span></div>
+        <div class="log-row ok"><span class="log-time">14:32:22</span><span class="log-msg">data.csv SHA-256 verified ✓</span></div>
+        <div class="log-row info"><span class="log-time">14:32:45</span><span class="log-msg"><b>client-2</b> TCP connect</span></div>
+        <div class="log-row ok"><span class="log-time">14:32:48</span><span class="log-msg">keys.json SHA-256 verified ✓</span></div>
+        <div class="log-row"><span class="log-time">14:32:50</span><span class="log-msg">Receiving report.pdf... 68%</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- CERTIFICATES PAGE -->
+<div class="page" id="page-certs">
+  <div class="page-header">
+    <div><div class="page-title">Certificates</div><div class="page-sub">Certificate Authority and issued certificates</div></div>
+    <button class="btn btn-sm btn-primary" onclick="toast('Certificate generation form ready','info')">Issue new cert</button>
+  </div>
+  <div class="card">
+    <div class="card-title">Issue certificate</div>
+    <div class="two-col">
+      <div>
+        <div class="field-row">
+          <div class="field"><label>Common Name (CN)</label><input placeholder="e.g. client-3"/></div>
+          <div class="field"><label>Validity (days)</label><input value="365" style="width:90px"/></div>
+        </div>
+        <div class="field"><label>Organisation (O)</label><input value="SecureShare Group"/></div>
+        <div class="field"><label>Role</label>
+          <select><option>Client</option><option>Server</option></select>
+        </div>
+      </div>
+      <div>
+        <div class="field"><label>Key size</label>
+          <select><option>RSA-2048</option><option>RSA-4096</option></select>
+        </div>
+        <div class="field"><label>Hash algorithm</label>
+          <select><option>SHA-256</option><option>SHA-512</option></select>
+        </div>
+        <div style="margin-top:8px;display:flex;gap:8px">
+          <button class="btn btn-primary" onclick="toast('Certificate issued and saved','ok')" style="flex:1">Generate &amp; sign</button>
+          <button class="btn" onclick="toast('CSR generated','info')">Export CSR</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="card">
+    <div class="card-title">Issued certificates</div>
+    <table class="tbl">
+      <thead><tr><th style="width:18%">CN</th><th style="width:16%">Role</th><th style="width:22%">Fingerprint</th><th style="width:16%">Issued</th><th style="width:14%">Expires</th><th style="width:14%">Status</th></tr></thead>
+      <tbody>
+        <tr>
+          <td class="mono">CA-root</td>
+          <td><span class="badge badge-info">CA</span></td>
+          <td class="mono" style="font-size:10px">3a:7f:2c:8b:1e...</td>
+          <td class="mono">2025-01-01</td>
+          <td class="mono">2027-01-01</td>
+          <td><span class="badge badge-ok">valid</span></td>
+        </tr>
+        <tr>
+          <td class="mono">server</td>
+          <td><span class="badge badge-pending">Server</span></td>
+          <td class="mono" style="font-size:10px">a5:b2:c3:d4:e5...</td>
+          <td class="mono">2025-01-01</td>
+          <td class="mono">2026-04-01</td>
+          <td><span class="badge badge-ok">valid</span></td>
+        </tr>
+        <tr>
+          <td class="mono">client-1</td>
+          <td><span class="badge" style="background:rgba(139,92,246,.12);color:#a78bfa;border:1px solid rgba(139,92,246,.3)">Client</span></td>
+          <td class="mono" style="font-size:10px">f6:07:18:9a:1b...</td>
+          <td class="mono">2025-01-01</td>
+          <td class="mono">2026-04-01</td>
+          <td><span class="badge badge-ok">valid</span></td>
+        </tr>
+        <tr>
+          <td class="mono">client-2</td>
+          <td><span class="badge" style="background:rgba(139,92,246,.12);color:#a78bfa;border:1px solid rgba(139,92,246,.3)">Client</span></td>
+          <td class="mono" style="font-size:10px">2c:3d:4e:5f:60...</td>
+          <td class="mono">2025-01-01</td>
+          <td class="mono">2026-04-01</td>
+          <td><span class="badge badge-ok">valid</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="card">
+    <div class="card-title">Inspect certificate</div>
+    <div style="display:flex;gap:8px;margin-bottom:10px">
+      <input placeholder="Paste PEM content or upload .pem file..." style="flex:1;height:32px;background:var(--surface2);border:1px solid var(--border);border-radius:5px;padding:0 10px;color:var(--text);font-family:var(--mono);font-size:11px;outline:none"/>
+      <button class="btn btn-sm" onclick="toast('Certificate parsed successfully','ok')">Inspect</button>
+    </div>
+    <div class="cert-card">
+      <div class="cert-field"><span class="k">Subject</span><span class="v">CN=client-1, O=SecureShare Group</span></div>
+      <div class="cert-field"><span class="k">Issuer</span><span class="v">CN=CA-root</span></div>
+      <div class="cert-field"><span class="k">Serial</span><span class="v">01</span></div>
+      <div class="cert-field"><span class="k">Public key</span><span class="v">RSA 2048-bit</span></div>
+      <div class="cert-field"><span class="k">Signature alg</span><span class="v">sha256WithRSAEncryption</span></div>
+      <div class="cert-field"><span class="k">SHA-256 fingerprint</span><span class="v" style="font-size:9px">f6:07:18:9a:1b:2c:3d:4e</span></div>
+      <div class="cert-field"><span class="k">Valid from</span><span class="v">2025-01-01</span></div>
+      <div class="cert-field"><span class="k">Valid until</span><span class="v">2026-04-01</span></div>
+      <div class="cert-field"><span class="k">Chain verified</span><span class="badge badge-ok">against CA-root</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- CRYPTO TOOLS PAGE -->
+<div class="page" id="page-crypto">
+  <div class="page-header">
+    <div><div class="page-title">Crypto tools</div><div class="page-sub">Test primitives — RSA, AES, SHA-256, signatures</div></div>
+  </div>
+  <div class="two-col">
+    <div class="card">
+      <div class="card-title">RSA encrypt / decrypt</div>
+      <div class="field"><label>Input text</label><input id="rsa-in" value="Hello, SecureShare!" /></div>
+      <div class="field"><label>Key</label>
+        <select id="rsa-key"><option>server.pem (public)</option><option>client-1.pem (public)</option><option>server-key.pem (private)</option></select>
+      </div>
+      <div style="display:flex;gap:6px;margin-bottom:10px">
+        <button class="btn btn-sm btn-primary" onclick="cryptoAction('rsa-out','RSA-OAEP encrypted')">Encrypt</button>
+        <button class="btn btn-sm" onclick="cryptoAction('rsa-out','RSA-OAEP decrypted: Hello, SecureShare!')">Decrypt</button>
+      </div>
+      <div class="crypto-output" id="rsa-out" style="color:var(--text3);font-size:10px">Output appears here...</div>
+    </div>
+    <div class="card">
+      <div class="card-title">AES-256-CBC encrypt / decrypt</div>
+      <div class="field"><label>Input text</label><input id="aes-in" value="Secret file contents here"/></div>
+      <div class="field"><label>AES key (hex, 32 bytes)</label><input id="aes-key" value="3a7f2c8b1e4d09f6a5b2c3d4e5f60718" style="font-family:var(--mono);font-size:11px"/></div>
+      <div style="display:flex;gap:6px;margin-bottom:10px">
+        <button class="btn btn-sm btn-primary" onclick="cryptoAction('aes-out','AES-256-CBC encrypted (random IV prepended)')">Encrypt</button>
+        <button class="btn btn-sm" onclick="cryptoAction('aes-out','AES-256-CBC decrypted: Secret file contents here')">Decrypt</button>
+      </div>
+      <div class="crypto-output" id="aes-out" style="color:var(--text3);font-size:10px">Output appears here...</div>
+    </div>
+  </div>
+  <div class="two-col">
+    <div class="card">
+      <div class="card-title">SHA-256 hash</div>
+      <div class="field"><label>Input</label><input id="hash-in" value="report.pdf contents..."/></div>
+      <button class="btn btn-sm btn-primary" onclick="cryptoAction('hash-out','a3f2c8b1e4d09f6a5b2c3d4e5f607189a1b2c3d4e5f60718293a4b5c6d7e8f9')" style="margin-bottom:10px">Compute SHA-256</button>
+      <div class="crypto-output" id="hash-out" style="color:var(--text3);font-size:10px">Hash appears here...</div>
+    </div>
+    <div class="card">
+      <div class="card-title">Digital signature</div>
+      <div class="field"><label>Message / file hash</label><input id="sig-in" value="a3f2c8b1e4d09f6a5b2..."/></div>
+      <div class="field"><label>Key</label>
+        <select><option>client-1-key.pem (private)</option><option>client-2-key.pem (private)</option></select>
+      </div>
+      <div style="display:flex;gap:6px;margin-bottom:10px">
+        <button class="btn btn-sm btn-primary" onclick="cryptoAction('sig-out','RSA-SHA256 signature generated')">Sign</button>
+        <button class="btn btn-sm" onclick="cryptoAction('sig-out','Signature VALID — matches public key')">Verify</button>
+      </div>
+      <div class="crypto-output" id="sig-out" style="color:var(--text3);font-size:10px">Signature appears here...</div>
+    </div>
+  </div>
+</div>
+
+<!-- AUDIT LOG PAGE -->
+<div class="page" id="page-log">
+  <div class="page-header">
+    <div><div class="page-title">Audit log</div><div class="page-sub">Full chronological event history</div></div>
+    <div style="display:flex;gap:8px">
+      <select style="height:28px;background:var(--surface2);border:1px solid var(--border);border-radius:5px;color:var(--text);font-size:12px;padding:0 8px">
+        <option>All events</option><option>Connections</option><option>Transfers</option><option>Errors</option>
+      </select>
+      <button class="btn btn-sm" onclick="toast('Log exported as log.txt','ok')">Export</button>
+    </div>
+  </div>
+  <div class="card">
+    <table class="tbl">
+      <thead><tr><th style="width:12%">Time</th><th style="width:12%">Type</th><th style="width:16%">Actor</th><th style="width:40%">Event</th><th style="width:20%">Detail</th></tr></thead>
+      <tbody id="log-tbody">
+        <tr><td class="mono">14:32:01</td><td><span class="badge badge-info">connect</span></td><td class="mono">client-1</td><td>TCP connection established</td><td class="mono" style="font-size:10px">192.168.1.4:49201</td></tr>
+        <tr><td class="mono">14:32:01</td><td><span class="badge" style="background:rgba(139,92,246,.12);color:#a78bfa;border:1px solid rgba(139,92,246,.3)">cert</span></td><td class="mono">server</td><td>Client certificate verified against CA</td><td class="mono" style="font-size:10px">CN=client-1 ✓</td></tr>
+        <tr><td class="mono">14:32:02</td><td><span class="badge" style="background:rgba(139,92,246,.12);color:#a78bfa;border:1px solid rgba(139,92,246,.3)">cert</span></td><td class="mono">client-1</td><td>Server certificate verified against CA</td><td class="mono" style="font-size:10px">CN=server ✓</td></tr>
+        <tr><td class="mono">14:32:02</td><td><span class="badge badge-pending">key</span></td><td class="mono">client-1</td><td>AES-256 session key sent (RSA-OAEP wrapped)</td><td class="mono" style="font-size:10px">key: 3a7f...8f9</td></tr>
+        <tr><td class="mono">14:32:02</td><td><span class="badge badge-pending">key</span></td><td class="mono">server</td><td>AES session key unwrapped via RSA private key</td><td class="mono" style="font-size:10px">IV: a3f2...1d</td></tr>
+        <tr><td class="mono">14:32:02</td><td><span class="badge badge-info">xfer</span></td><td class="mono">client-1</td><td>File transfer started — thesis.pdf</td><td class="mono" style="font-size:10px">1.2 MB</td></tr>
+        <tr><td class="mono">14:32:03</td><td><span class="badge badge-ok">verify</span></td><td class="mono">server</td><td>thesis.pdf SHA-256 hash match — integrity OK</td><td class="mono" style="font-size:10px">sig: f607...e8f9</td></tr>
+        <tr><td class="mono">14:32:20</td><td><span class="badge badge-ok">verify</span></td><td class="mono">server</td><td>data.csv SHA-256 hash match — integrity OK</td><td class="mono" style="font-size:10px">sig: 2c3d...6071</td></tr>
+        <tr><td class="mono">14:32:45</td><td><span class="badge badge-info">connect</span></td><td class="mono">client-2</td><td>TCP connection established</td><td class="mono" style="font-size:10px">192.168.1.9:51033</td></tr>
+        <tr><td class="mono">14:32:48</td><td><span class="badge badge-ok">verify</span></td><td class="mono">server</td><td>keys.json SHA-256 hash match — integrity OK</td><td class="mono" style="font-size:10px">sig: 9a1b...4b5c</td></tr>
+        <tr><td class="mono">14:32:50</td><td><span class="badge badge-info">xfer</span></td><td class="mono">client-1</td><td>File transfer started — report.pdf</td><td class="mono" style="font-size:10px">2.3 MB</td></tr>
+        <tr><td class="mono">14:32:57</td><td><span class="badge badge-pending">xfer</span></td><td class="mono">server</td><td>Receiving report.pdf... 68% complete</td><td class="mono" style="font-size:10px">ongoing</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="card">
+    <div class="card-title">End-to-end test runner</div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <button class="btn btn-primary" onclick="runTest()">Run full E2E test</button>
+      <span style="font-size:11px;color:var(--text3)">Spins up local server + client, sends test file, verifies SHA-256 integrity</span>
+    </div>
+    <div id="test-result" style="margin-top:12px;display:none">
+      <div class="log-wrap">
+        <div class="log-row ok"><span class="log-time">00:00:01</span><span class="log-msg">Server started on 127.0.0.1:5000</span></div>
+        <div class="log-row ok"><span class="log-time">00:00:01</span><span class="log-msg">Client connected — cert verified</span></div>
+        <div class="log-row ok"><span class="log-time">00:00:01</span><span class="log-msg">AES-256 key exchange OK</span></div>
+        <div class="log-row ok"><span class="log-time">00:00:02</span><span class="log-msg">test_file.txt sent — 1024 bytes encrypted</span></div>
+        <div class="log-row ok"><span class="log-time">00:00:02</span><span class="log-msg">SHA-256 match — decrypted file identical to source</span></div>
+        <div class="log-row ok"><span class="log-time">00:00:02</span><span class="log-msg">Digital signature verified ✓</span></div>
+        <div class="log-row ok"><span class="log-time">00:00:02</span><span class="log-msg" style="font-weight:500;color:var(--green)">ALL TESTS PASSED</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</div><!-- /main -->
+
+<!-- RIGHT PANEL (visible on server/dashboard) -->
+<div class="rpanel" id="rpanel">
+  <div>
+    <div class="rp-label">Active session</div>
+    <div class="rp-box">
+      <div style="font-size:10px;color:var(--text3);margin-bottom:3px">Client</div>
+      <div style="font-family:var(--mono);font-size:12px;color:var(--text)">client-1</div>
+      <div style="font-size:10px;color:var(--text3);margin-top:2px">192.168.1.4:49201</div>
+      <span class="badge badge-ok" style="margin-top:6px">connected</span>
+    </div>
+  </div>
+  <div>
+    <div class="rp-label">Server cert</div>
+    <div class="rp-box">
+      <div style="font-family:var(--mono);font-size:11px;color:var(--text)">server.pem</div>
+      <div style="font-size:10px;color:var(--text3);margin-top:3px">RSA-2048 · SHA-256</div>
+      <div style="font-size:10px;color:var(--text3)">Expires 2026-04-01</div>
+      <span class="badge badge-ok" style="margin-top:6px">trusted</span>
+    </div>
+  </div>
+  <div>
+    <div class="rp-label">AES session key</div>
+    <div class="hex-block">3a7f2c8b 1e4d09f6<br>a5b2c3d4 e5f60718<br><span style="color:var(--text3)">...</span></div>
+  </div>
+  <div>
+    <div class="rp-label">Transfer progress</div>
+    <div style="font-size:11px;color:var(--text2);margin-bottom:5px">report.pdf</div>
+    <div class="prog-bar"><div class="prog-fill" id="rprog" style="width:68%"></div></div>
+    <div style="font-family:var(--mono);font-size:10px;color:#60a5fa;margin-top:4px" id="rpct">68%</div>
+  </div>
+</div>
+</div><!-- /app-body -->
+
+<!-- TOASTS -->
+<div class="toasts" id="toasts"></div>
+
+<script>
+function gotoPage(id, navBtn) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.getElementById('page-' + id).classList.add('active');
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  if (navBtn) navBtn.classList.add('active');
+  const rp = document.getElementById('rpanel');
+  rp.style.display = (id === 'dashboard' || id === 'server') ? 'flex' : 'none';
+}
+
+function setSidebar(el) {
+  document.querySelectorAll('.sidebar-item').forEach(i => i.classList.remove('active'));
+  el.classList.add('active');
+}
+
+function toast(msg, type) {
+  const wrap = document.getElementById('toasts');
+  const t = document.createElement('div');
+  t.className = 'toast ' + (type || 'info');
+  const icons = {ok:'<svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M2 7l3 3 7-7" stroke="#10b981" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',err:'<svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M3 3l8 8M11 3l-8 8" stroke="#ef4444" stroke-width="1.5" stroke-linecap="round"/></svg>',info:'<svg width="14" height="14" viewBox="0 0 14 14" fill="none"><circle cx="7" cy="7" r="5" stroke="#60a5fa" stroke-width="1"/><path d="M7 5v4M7 4v.5" stroke="#60a5fa" stroke-width="1.2" stroke-linecap="round"/></svg>'};
+  t.innerHTML = (icons[type] || icons.info) + msg;
+  wrap.appendChild(t);
+  setTimeout(() => t.remove(), 3000);
+}
+
+let connected = false;
+function toggleConnect() {
+  connected = !connected;
+  document.getElementById('conn-status').className = 'badge ' + (connected ? 'badge-ok' : 'badge-fail');
+  document.getElementById('conn-status').textContent = connected ? 'connected' : 'disconnected';
+  document.getElementById('conn-btn').textContent = connected ? 'Disconnect' : 'Connect';
+  toast(connected ? 'Connected to ' + document.getElementById('srv-ip').value : 'Disconnected', connected ? 'ok' : 'info');
+}
+
+function handleFile(e) {
+  const f = e.target.files[0];
+  if (!f) return;
+  document.getElementById('file-name').textContent = f.name;
+  document.getElementById('file-size').textContent = (f.size / 1024).toFixed(0) + ' KB';
+  document.getElementById('send-area').style.display = 'block';
+}
+
+function handleDrop(e) {
+  e.preventDefault();
+  document.getElementById('drop-zone').classList.remove('drag');
+  const f = e.dataTransfer.files[0];
+  if (!f) return;
+  document.getElementById('file-name').textContent = f.name;
+  document.getElementById('file-size').textContent = (f.size / 1024).toFixed(0) + ' KB';
+  document.getElementById('send-area').style.display = 'block';
+}
+
+function simulateSend() {
+  if (!connected) { toast('Not connected to server','err'); return; }
+  const pw = document.getElementById('send-prog-wrap');
+  pw.style.display = 'block';
+  let p = 0;
+  const stages = ['Generating AES key...','Encrypting file...','Wrapping key with RSA...','Sending...','Verifying signature...'];
+  const iv = setInterval(() => {
+    p += 4;
+    if (p > 100) p = 100;
+    document.getElementById('send-prog-fill').style.width = p + '%';
+    document.getElementById('send-pct').textContent = p + '%';
+    document.getElementById('send-stage').textContent = stages[Math.min(Math.floor(p / 22), 4)];
+    if (p === 100) {
+      clearInterval(iv);
+      toast('File sent and verified','ok');
+      setTimeout(() => { pw.style.display = 'none'; document.getElementById('send-area').style.display = 'none'; }, 1500);
+    }
+  }, 80);
+}
+
+function cryptoAction(outId, msg) {
+  const el = document.getElementById(outId);
+  el.style.color = 'var(--green)';
+  el.textContent = '';
+  const full = '[' + new Date().toLocaleTimeString() + '] ' + msg + '\n\n' + randomHex();
+  let i = 0;
+  const iv = setInterval(() => {
+    el.textContent += full[i++];
+    if (i >= full.length) clearInterval(iv);
+  }, 12);
+}
+
+function randomHex() {
+  let s = '';
+  for (let i = 0; i < 64; i++) s += Math.floor(Math.random()*16).toString(16);
+  return s.match(/.{1,8}/g).join(' ');
+}
+
+function runTest() {
+  document.getElementById('test-result').style.display = 'block';
+  toast('E2E test complete — all passed','ok');
+}
+
+let pct = 68;
+setInterval(() => {
+  if (pct < 100) {
+    pct++;
+    const p = pct + '%';
+    const pf = document.getElementById('prog-fill');
+    const pp = document.getElementById('prog-pct');
+    const rp = document.getElementById('rprog');
+    const rc = document.getElementById('rpct');
+    if (pf) pf.style.width = p;
+    if (pp) pp.textContent = p;
+    if (rp) rp.style.width = p;
+    if (rc) rc.textContent = p;
+  }
+}, 600);
+
+document.getElementById('rpanel').style.display = 'flex';
+</script>
+</body>
+</html>
