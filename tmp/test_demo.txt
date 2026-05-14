@@ -1,0 +1,3 @@
+Fichier démo SecureShare
+Client: test-client
+Date: 2026-05-14 03:36:53.280381

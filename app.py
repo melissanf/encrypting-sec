@@ -291,8 +291,8 @@ def server_handle_client(conn, addr):
 def server_loop():
     global _server_running
     ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
-    ctx.load_cert_chain('server.crt', 'server.key')
-    ctx.load_verify_locations('ca.crt')
+    ctx.load_cert_chain('certs/server.pem', 'keys/server_key.pem')
+    ctx.load_verify_locations('certs/ca.pem')
     ctx.verify_mode = ssl.CERT_REQUIRED
 
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
@@ -325,11 +325,11 @@ def api_server_start():
     if _server_running:
         return jsonify({'status': 'ok', 'message': 'Serveur déjà actif'})
     # Check required cert files
-    for f in ['server.crt', 'server.key', 'ca.crt']:
+    for f in ['certs/server.pem', 'keys/server_key.pem', 'certs/ca.pem']:
         if not os.path.exists(f):
             return jsonify({
                 'status':  'error',
-                'message': f'Fichier manquant: {f} — lancez "copy certs\\server.pem server.crt" etc.'
+                'message': f'Fichier manquant: {f}'
             }), 500
     try:
         _server_running = True
