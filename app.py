@@ -367,6 +367,14 @@ def api_server_log():
 @app.route('/api/client/send', methods=['POST'])
 def api_client_send():
     client_name = request.form.get('client_name', 'client-1')
+    server_host = request.form.get('server_host', 'localhost').strip() or 'localhost'
+    server_port_raw = request.form.get('server_port', '8443')
+    try:
+        server_port = int(server_port_raw)
+    except Exception:
+        return jsonify({'status': 'error', 'message': 'Port serveur invalide'}), 400
+    if not (1 <= server_port <= 65535):
+        return jsonify({'status': 'error', 'message': 'Le port doit être entre 1 et 65535'}), 400
     uploaded    = request.files.get('file')
     if not uploaded:
         return jsonify({'status': 'error', 'message': 'Aucun fichier fourni'}), 400
@@ -382,7 +390,12 @@ def api_client_send():
 
     try:
         client = SecureClient(client_name)
-        result = client.send_file(tmp_path, log_callback=log_cb)
+        result = client.send_file(
+            tmp_path,
+            server_host=server_host,
+            server_port=server_port,
+            log_callback=log_cb
+        )
         if os.path.exists(tmp_path):
             os.remove(tmp_path)
         return jsonify({

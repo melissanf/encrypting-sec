@@ -317,30 +317,38 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13
     <div class="card">
       <div class="card-title">Server connection</div>
       <div class="field-row">
-        <div class="field"><label>Server IP</label><input id="srv-ip" value="192.168.1.1" placeholder="192.168.1.1"/></div>
-        <div class="field" style="max-width:90px"><label>Port</label><input id="srv-port" value="5000"/></div>
+        <div class="field"><label>Server IP</label><input id="srv-ip" value="localhost" placeholder="127.0.0.1 or localhost"/></div>
+        <div class="field" style="max-width:90px"><label>Port</label><input id="srv-port" value="8443"/></div>
       </div>
-      <div class="field"><label>Client certificate (.pem)</label>
-        <div style="display:flex;gap:8px">
-          <input value="client-1.pem" readonly style="flex:1"/>
-          <button class="btn btn-sm" onclick="toast('Certificate loaded','ok')">Browse</button>
+      <div class="field"><label>Client identity</label>
+        <select id="client-name">
+          <option value="client-1">client-1</option>
+          <option value="client-2">client-2</option>
+        </select>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>Client certificate (.pem)</label>
+          <input id="client-cert-display" value="client_1.pem" readonly/>
+        </div>
+        <div class="field">
+          <label>Private key (.pem)</label>
+          <input id="client-key-display" value="client_1_key.pem" readonly/>
         </div>
       </div>
-      <div class="field"><label>Private key (.pem)</label>
-        <div style="display:flex;gap:8px">
-          <input value="client-1-key.pem" readonly style="flex:1"/>
-          <button class="btn btn-sm" onclick="toast('Key loaded','ok')">Browse</button>
-        </div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <button class="btn btn-sm" id="identity-apply-btn">Apply identity</button>
+        <span id="identity-status" class="badge badge-info">using client-1</span>
       </div>
     </div>
     <div class="card">
       <div class="card-title">Connection info</div>
       <div class="cert-card">
-        <div class="cert-field"><span class="k">Subject</span><span class="v">CN=client-1</span></div>
-        <div class="cert-field"><span class="k">Issuer</span><span class="v">CN=CA-root</span></div>
+        <div class="cert-field"><span class="k">Subject</span><span class="v" id="conn-subject">CN=client-1</span></div>
+        <div class="cert-field"><span class="k">Issuer</span><span class="v" id="conn-issuer">CN=CA-root</span></div>
         <div class="cert-field"><span class="k">Algorithm</span><span class="v">RSA-2048</span></div>
-        <div class="cert-field"><span class="k">Expires</span><span class="v">2026-04-01</span></div>
-        <div class="cert-field"><span class="k">Status</span><span class="badge badge-ok">trusted</span></div>
+        <div class="cert-field"><span class="k">Expires</span><span class="v" id="conn-expires">Loaded from cert store</span></div>
+        <div class="cert-field"><span class="k">Status</span><span class="badge badge-ok" id="conn-trust">trusted</span></div>
       </div>
     </div>
   </div>
@@ -761,6 +769,109 @@ async function loadDashboard() {
 // ── CLIENT ────────────────────────────────────────
 
 let selectedFile = null;
+let clientConnected = false;
+let activeClientName = 'client-1';
+
+const clientProfiles = {
+  'client-1': { cert: 'client_1.pem', key: 'client_1_key.pem', subject: 'CN=client-1' },
+  'client-2': { cert: 'client_2.pem', key: 'client_2_key.pem', subject: 'CN=client-2' }
+};
+
+function validateEndpointFields() {
+  const hostEl = document.getElementById('srv-ip');
+  const portEl = document.getElementById('srv-port');
+  const host = hostEl.value.trim() || 'localhost';
+  const port = parseInt(portEl.value, 10);
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    toast('Port must be an integer between 1 and 65535', 'err');
+    portEl.focus();
+    return null;
+  }
+  hostEl.value = host;
+  return { host: host, port: port };
+}
+
+function updateConnectionBadge() {
+  const badge = document.getElementById('conn-status');
+  const btn = document.getElementById('conn-btn');
+  if (clientConnected) {
+    badge.className = 'badge badge-ok';
+    badge.textContent = 'connected';
+    btn.textContent = 'Disconnect';
+    btn.className = 'btn btn-sm btn-danger';
+  } else {
+    badge.className = 'badge badge-fail';
+    badge.textContent = 'disconnected';
+    btn.textContent = 'Connect';
+    btn.className = 'btn btn-sm btn-primary';
+  }
+}
+
+async function refreshIdentityCertificateInfo(profile) {
+  const subjectEl = document.getElementById('conn-subject');
+  const issuerEl = document.getElementById('conn-issuer');
+  const expiresEl = document.getElementById('conn-expires');
+  const trustEl = document.getElementById('conn-trust');
+
+  try {
+    const res = await api('/api/ca/inspect', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ filename: profile.cert })
+    });
+    if (res.status !== 'ok') throw new Error(res.message || 'Certificate lookup failed');
+
+    subjectEl.textContent = 'CN=' + (res.subject || activeClientName);
+    issuerEl.textContent = 'CN=' + (res.issuer || 'CA-root');
+    expiresEl.textContent = res.valid_until || 'Unknown';
+    if (res.chain === 'TRUSTED') {
+      trustEl.className = 'badge badge-ok';
+      trustEl.textContent = 'trusted';
+    } else {
+      trustEl.className = 'badge badge-fail';
+      trustEl.textContent = 'untrusted';
+    }
+  } catch (_) {
+    subjectEl.textContent = profile.subject;
+    issuerEl.textContent = 'CN=CA-root';
+    expiresEl.textContent = 'Certificate not found';
+    trustEl.className = 'badge badge-fail';
+    trustEl.textContent = 'unknown';
+  }
+}
+
+async function applyClientIdentity(showToastMessage) {
+  const sel = document.getElementById('client-name');
+  const name = sel.value || 'client-1';
+  const profile = clientProfiles[name] || clientProfiles['client-1'];
+  activeClientName = name;
+  document.getElementById('client-cert-display').value = profile.cert;
+  document.getElementById('client-key-display').value = profile.key;
+  document.getElementById('identity-status').textContent = 'using ' + name;
+  await refreshIdentityCertificateInfo(profile);
+  if (showToastMessage) {
+    toast('Identity set to ' + name, 'ok');
+  }
+}
+
+async function toggleClientConnection() {
+  if (clientConnected) {
+    clientConnected = false;
+    updateConnectionBadge();
+    toast('Client disconnected', 'info');
+    return;
+  }
+  const endpoint = validateEndpointFields();
+  if (!endpoint) return;
+  const status = await api('/api/status');
+  if (status.status !== 'ok') {
+    toast(status.message || 'Backend unavailable', 'err');
+    return;
+  }
+  clientConnected = true;
+  updateConnectionBadge();
+  toast('Client connected to ' + endpoint.host + ':' + endpoint.port, 'ok');
+}
 
 function handleFile(e) {
   const f = e.target.files[0];
@@ -783,43 +894,59 @@ function handleDrop(e) {
 }
 
 async function sendFile() {
+  if (!clientConnected) { toast('Connect the client first', 'err'); return; }
   if (!selectedFile) { toast('No file selected', 'err'); return; }
+
+  const endpoint = validateEndpointFields();
+  if (!endpoint) return;
+
   const pw = document.getElementById('send-prog-wrap');
+  const stageEl = document.getElementById('send-stage');
+  const pctEl = document.getElementById('send-pct');
+  const fillEl = document.getElementById('send-prog-fill');
   pw.style.display = 'block';
+
   const stages = ['Encrypting...', 'Uploading...', 'Verifying...'];
   let stageIdx = 0;
+  let tick = 0;
 
   const iv = setInterval(() => {
-    const p = Math.min(15 + stageIdx * 30 + Math.random() * 10, 95);
-    document.getElementById('send-prog-fill').style.width = p + '%';
-    document.getElementById('send-pct').textContent = Math.round(p) + '%';
-    document.getElementById('send-stage').textContent = stages[Math.min(stageIdx, 2)];
-  }, 200);
+    tick += 1;
+    if (tick > 5 && stageIdx < 1) stageIdx = 1;
+    if (tick > 12 && stageIdx < 2) stageIdx = 2;
+    const base = [12, 40, 72][stageIdx];
+    const p = Math.min(base + Math.random() * 18, 95);
+    fillEl.style.width = p + '%';
+    pctEl.textContent = Math.round(p) + '%';
+    stageEl.textContent = stages[stageIdx];
+  }, 180);
 
   const fd = new FormData();
   fd.append('file', selectedFile);
-  fd.append('client_name', 'client-1');
+  fd.append('client_name', activeClientName);
+  fd.append('server_host', endpoint.host);
+  fd.append('server_port', String(endpoint.port));
 
   try {
     const res = await api('/api/client/send', { method: 'POST', body: fd });
     clearInterval(iv);
-    document.getElementById('send-prog-fill').style.width = '100%';
-    document.getElementById('send-pct').textContent = '100%';
-    document.getElementById('send-stage').textContent = 'Complete';
+    fillEl.style.width = '100%';
+    pctEl.textContent = '100%';
+    stageEl.textContent = 'Complete';
     if (res.status === 'ok') {
       toast('File sent and verified', 'ok');
-      // append to transfer history
       const tbody = document.querySelector('#page-client .tbl tbody');
-      tbody.innerHTML = '<tr><td>' + selectedFile.name + '</td><td class="mono">localhost</td><td class="mono">' + new Date().toLocaleTimeString() + '</td><td class="mono">' + fmtSize(selectedFile.size) + '</td><td><span class="badge badge-ok">sent</span></td></tr>' + tbody.innerHTML;
+      tbody.innerHTML = '<tr><td>' + selectedFile.name + '</td><td class="mono">' + endpoint.host + ':' + endpoint.port + '</td><td class="mono">' + new Date().toLocaleTimeString() + '</td><td class="mono">' + fmtSize(selectedFile.size) + '</td><td><span class="badge badge-ok">sent</span></td></tr>' + tbody.innerHTML;
     } else {
       toast(res.message || 'Send failed', 'err');
     }
   } finally {
     setTimeout(() => {
       pw.style.display = 'none';
-      document.getElementById('send-prog-fill').style.width = '0%';
-      document.getElementById('send-pct').textContent = '0%';
-    }, 2000);
+      fillEl.style.width = '0%';
+      pctEl.textContent = '0%';
+      stageEl.textContent = 'Encrypting...';
+    }, 1600);
   }
 }
 
@@ -1137,6 +1264,9 @@ async function runTest() {
 document.getElementById('rpanel').style.display = 'flex';
 
 document.getElementById('server-toggle-btn').addEventListener('click', toggleServer);
+document.getElementById('conn-btn').addEventListener('click', toggleClientConnection);
+document.getElementById('identity-apply-btn').addEventListener('click', function() { applyClientIdentity(true); });
+document.getElementById('client-name').addEventListener('change', function() { applyClientIdentity(false); });
 document.getElementById('gen-ca-btn').addEventListener('click', generateCA);
 document.getElementById('issue-cert-btn').addEventListener('click', issueCert);
 document.getElementById('gen-sign-btn').addEventListener('click', issueCert);
@@ -1153,6 +1283,8 @@ document.getElementById('dash-refresh-btn').addEventListener('click', loadDashbo
 document.getElementById('e2e-test-btn').addEventListener('click', runTest);
 document.querySelector('#page-log select').addEventListener('change', loadAuditLog);
 
+applyClientIdentity(false);
+updateConnectionBadge();
 loadDashboard();
 </script>
 </body>

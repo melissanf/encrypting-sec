@@ -51,13 +51,15 @@ class SecureClient:
         ctx.check_hostname = False   # hostname = 'localhost' en dev
         return ctx
 
-    def send_file(self, filepath, server_cert_path=None, log_callback=None):
+    def send_file(self, filepath, server_host=None, server_port=None, server_cert_path=None, log_callback=None):
         """
         Envoie un fichier chiffré au serveur.
         Étapes : SSL handshake → chiffrement AES → wrap RSA → envoi → vérification signature
         """
         if not os.path.exists(filepath):
             raise FileNotFoundError(f'Fichier introuvable: {filepath}')
+        host = (server_host or SERVER_HOST).strip()
+        port = int(server_port or SERVER_PORT)
 
         def log(msg, level='info'):
             ts = datetime.now().strftime('%H:%M:%S')
@@ -107,10 +109,10 @@ class SecureClient:
 
         # ── 7. Connexion SSL et envoi ──
         ctx  = self._build_ssl_context()
-        log(f'Connexion SSL vers {SERVER_HOST}:{SERVER_PORT}...')
+        log(f'Connexion SSL vers {host}:{port}...')
 
-        with socket.create_connection((SERVER_HOST, SERVER_PORT), timeout=30) as raw:
-            with ctx.wrap_socket(raw, server_hostname=SERVER_HOST) as ssl_conn:
+        with socket.create_connection((host, port), timeout=30) as raw:
+            with ctx.wrap_socket(raw, server_hostname=host) as ssl_conn:
                 log('Handshake SSL OK — certificats vérifiés mutuellement', 'ok')
 
                 # Envoyer métadonnées
